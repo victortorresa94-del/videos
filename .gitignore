@@ -1,9 +1,52 @@
+# Dependencies
 node_modules/
-.DS_Store
+.pnpm-store/
+package-lock.json
+yarn.lock
+
+# Next.js
+.next/
 out/
+next-env.d.ts
+
+# Production
 build/
 dist/
-assets/
+
+# Env
 .env
 .env.local
-*.log
+.env.*.local
+!.env.example
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Tests
+coverage/
+playwright-report/
+test-results/
+.playwright/
+
+# Vercel
+.vercel/
+
+# Local dev artifacts
+dev.log
+tsconfig.tsbuildinfo
+
+# Claude Code local settings (NEVER commit — may contain secrets in allowlists)
+.claude/
+
+# Supabase
+**/supabase/.branches
+**/supabase/.temp

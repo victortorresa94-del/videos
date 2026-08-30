@@ -22,14 +22,19 @@
 | Mirar | Arrastrar con el ratón · rueda para zoom | Arrastrar mitad derecha |
 | Saltar | `Espacio` | Botón **SALTAR** |
 | Correr | `Shift` (gasta vigor) | Botón **CORRER** |
-| Atacar | Clic izquierdo / `J` | Botón **⚔️** |
+| Atacar | Clic (sin arrastrar) / `J` | Botón **⚔️** |
+| Montar a caballo | `E` (junto al caballo) | Botón **🐴** (aparece al acercarte) |
 | Pausa | `Esc` / `P` | Botón **❚❚** |
 
 ---
 
-## 🏰 Qué incluye el prototipo
+## 🏰 Qué incluye el prototipo (v0.2)
 
 - **Mundo abierto procedural** (~560×560 m): colinas onduladas, montañas que cierran el mapa, lagos y meseta central. Generado con ruido de valor + fBm; nada está "pintado a mano" salvo las estructuras.
+- **Caballo montable**: acércate y pulsa `E` (o 🐴 en móvil) para montar; galopa al doble de velocidad con animación de patas, pose de jinete y cámara elevada.
+- **Texturas procedurales** generadas por código (canvas): sillares de piedra en murallas y torres, tejas escamadas, madera vetada, revoco, paja y suelo moteado. Sin descargar ni un solo fichero de imagen.
+- **Caminos de tierra** pintados en el terreno que conectan la puerta del castillo con la aldea y con el campamento de bandidos (y la vegetación los respeta).
+- **Agua con oleaje** animado por vértices, **nubes a la deriva** que se atenúan de noche, **halo del sol** aditivo y niebla cuyo alcance cambia entre el día y la noche.
 - **Castillo** con murallas almenadas, cuatro torres, torre del homenaje (keep), caseta de la puerta y estandartes.
 - **Aldea** de casas con entramado de madera, tejados variados, pozo y hogueras animadas.
 - **Bosques y rocas** dispersos con `InstancedMesh` (cientos de árboles con un solo *draw call* cada capa, clave para el rendimiento en móvil).

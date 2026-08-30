@@ -51,3 +51,46 @@ Confirmado con las posiciones de mundo de los huesos de los dedos del pie y el c
 
 ## Herramienta de inspección
 Harness dedicado en el scratchpad de la sesión (three.min.js r128 + GLTFLoader.js + SkeletonUtils.js locales, Chromium headless vía Playwright-core, `THREE.GLTFLoader.parse` sobre los `.glb` en base64): `gltf.animations`, `skeleton.bones`, `Box3().setFromObject(scene)` y posiciones de mundo de huesos clave. 0 `pageerror`, 0 errores de consola al cargar ambos modelos.
+
+---
+
+# Inspección de assets — Sprint 2 «La montura»
+
+Modelo: **Quaternius — "LowPoly Animated Animals" (`Horse.fbx`)**, CC0. Descargado del flujo de descarga anónima de itch.io ($0, `Farm Animals Animated by Quaternius.zip`, 6,6 MB, verificado con `curl` contra el endpoint real de descarga firmada — la URL de la ficha de itch.io no sirve el archivo directamente, requiere el flujo `download_url`→`file/{upload_id}`→URL R2 firmada de 60 s, documentado en `docs/CREDITOS.md`). El zip trae 7 animales (Cow, Horse, Llama, Pig, Pug, Sheep, Zebra) en FBX/OBJ/Blend — **sin glTF**.
+
+## Conversión FBX → glTF y recorte
+1. `FBX2glTF` v0.9.7 (paquete npm `fbx2gltf`, binario prebuilt) convierte `Horse.fbx` (1,02 MB) → `Horse_conv.glb` (294,6 KB), confirmando **6 animation stacks**: `Death, Idle, Jump, Run, Walk, WalkSlow`.
+2. `@gltf-transform/core`: se eliminan (canal+sampler+animación, mismo cuidado que con el Knight — `Animation.dispose()` no basta) los clips `Death`, `Jump`, `WalkSlow` — nos quedamos con los 3 pedidos por el encargo (Idle/Walk/Gallop). `resample()+prune()+dedup()+weld()` → **160,6 KB**, prune reporta 11 nodos y 99 accessors huérfanos liberados.
+3. `gltf-transform validate`: **0 errores**. Únicos avisos: `NODE_SKINNED_MESH_NON_ROOT` / `NODE_SKINNED_MESH_LOCAL_TRANSFORMS` — informativos, preexistentes en el export de FBX2glTF (el nodo skinned no es la raíz de la escena), no afectan al render con `SkeletonUtils.clone`.
+
+## Clips conservados
+| Clip (nombre real, con el pipe del Armature) | Duración | Uso en el juego |
+|---|---|---|
+| `Armature\|Idle` | 6.25 s (bucle largo, varias subposes) | caballo parado / jinete no montado |
+| `Armature\|Walk` | 2.667 s | trote a velocidad de paseo |
+| `Armature\|Run` | 0.833 s (zancada rápida) | galope — `P.speed>=8` montado |
+
+Sin clip de "Attack"/"Kick" en este pack (no hace falta: el caballo no ataca en el diseño actual).
+
+## Huesos (28, esqueleto `Armature`)
+`root, Body, Torso, Hips, Back, Shoulders, Neck, Head, Tail1..Tail4, FrontLegL/R, FrontUpLegL/R, FrontLowLegL/R, FrontFootL/R, BackLegL/R, BackUpLegL/R, BackLowLegL/R, BackFootL/R`.
+
+**Hueso usado para escalar a la cruz**: `Shoulders` (a la altura de la base del cuello/inicio de la espalda, justo donde se apoyaría la silla) — ver `boneHeightScale()` en el código: escala = 1,6 / (alturaMundoDe(`Shoulders`) − bboxMin.y).
+
+## Bounding box y escala (bind pose, unidades originales del FBX sin normalizar — el export de FBX2glTF no reescala a metros)
+| | Valor |
+|---|---|
+| bboxMin | (−1.285, 0.018, −4.118) |
+| bboxMax | (1.285, 6.924, 5.117) |
+| tamaño (X,Y,Z) | 2.570 × 6.905 × 9.235 |
+| altura de `Shoulders` (mundo, bind) | 4.11 |
+| escala aplicada (cruz→1,6 m) | ×0.3893 → altura total resultante (orejas) ≈ 2,70 m, cabeza en alto/alerta — plausible para un caballo estilizado con la cabeza erguida en `Idle` |
+
+## Eje frontal
+`Head` (z≈+3.46), patas delanteras (z≈+1.86) vs. patas traseras (z≈−2.20) y cola (z≈−2.68 a −3.63, bind pose): **el modelo mira hacia +Z local**, igual que el Knight — no hace falta grupo corrector, se cablea con `clone.rotation.y = H.yaw` directo (misma convención que ya usa el juego).
+
+## Mallas
+`Horse_1, Horse_2` (dos primitivas), materiales `Material.003`/`Material.006`, **sin texturas** — coloreado 100% por `COLOR_0` (vertex colors), confirmado visualmente (pelaje castaño, crin/cola negras, mancha blanca/blaze en la cara — un detalle de pelaje real de caballo, no un error de render).
+
+## Hallazgo de depuración (para que quede registrado)
+Al revisar capturas de la primera integración parecía que la espada del jinete "colgaba tumbada sobre el cuello del caballo" al montar. Tras aislar caballo y jinete por separado (`clone.visible=false` de cada uno) se confirmó que esa forma clara y alargada es el **blaze/mancha blanca de la cara del caballo** (parte del pelaje del modelo), no la espada — la espada apenas se ve desde perfil porque queda pegada al costado, oculta tras la pierna/cadera. Sí se encontró un artefacto real: con el fémur doblado −1.2 rad para la pose de monta, un par de vértices de `Knight_Cape` (con algo de peso esquelético cerca de la cadera) se estiraban en un hilo rojo hacia el suelo — se resolvió ocultando la capa (`Knight_Cape.visible=false`) mientras `H.mounted` es verdadero (técnica habitual: muchos juegos retiran o pliegan la capa al montar).

@@ -89,9 +89,67 @@ PS4 base: **1080p/30 estable, sin caídas** — Monolith prefirió 30 clavados c
 | Fortaleza asediable | Clímax territorial | Asalto al campamento grande como final de campaña | Fase 3–5 |
 | 30 fps clavados | Fluidez sagrada | Modo calidad AUTO en móvil + dieta de draw calls | Fase 2 |
 
+---
+
+# PARTE II — La sala de máquinas (motor, gráficos, pipeline y backend)
+
+## 8. El motor: LithTech V6, un motor propio de 16 años de linaje
+
+Shadow of Mordor NO corre en Unreal ni Unity: corre en **LithTech**, el motor interno de Monolith — el linaje que viene de F.E.A.R. (versión "Jupiter EX", 2005) evolucionado durante una década; la propia web de Monolith designó la encarnación de Mordor como **LithTech V6**, con el sistema Nemesis integrado a nivel de motor. Lecciones: (1) un equipo mediano compitió con los motores gigantes porque su motor estaba **especializado en SU juego** (hordas + procedural de personajes), no en todo; (2) el motor propio les dio el Nemesis a nivel nativo, imposible de enchufar a un motor ajeno de la época. Para nosotros: valida el camino "motor pequeño especializado" (nuestro Three.js single-file está especializándose en ESTE juego) y da el criterio de la decisión de Fase 4 — se migra cuando el motor deje de estar especializado en lo que el juego necesita.
+
+## 9. Renderizado y técnicas gráficas
+
+- **Presupuesto sagrado**: PS4 base **1080p/30 sin caídas** con ~30 orcos en pantalla. En PS4 Pro, **resolución dinámica** (~1620p en modo calidad): la resolución baja ANTES de que el frame se caiga — la técnica exacta que nos falta en iPhone (nuestro plan: escalar `pixelRatio` dinámicamente cuando el frame pase de 33 ms).
+- **La grieta conocida**: Digital Foundry cazó **texturas de baja resolución evidentes en 4K** en la versión Pro — el streaming de memoria no acompañó al salto de resolución. Lección: resolución sin presupuesto de texturas/memoria es maquillaje; nuestro equivalente es el presupuesto de draw calls (H1) antes que más píxeles.
+- Iluminación dinámica de antorchas/fuegos sobre hordas + tiempo atmosférico por región; LODs agresivos de personajes (la horda lejana baja de esqueleto y malla). Nuestra versión: LOD de bandidos lejanos (congelar mixer + malla simple) cuando crezca la población, Fase 3.
+
+## 10. La fábrica de orcos (el pipeline de contenido procedural)
+
+Cientos de capitanes "únicos" salen de una **fábrica de composición** (confirmado por el material de GDC): *presets de cabeza* + *rasgos faciales* + *tintes de piel* + *piezas de armadura combinables* + *cicatrices aplicadas post-evento* (te recuerdan la quemadura que les hiciste) + *presets de voz* × *personalidades de diálogo* (los "barks": miles de líneas grabadas que se ensamblan con título y nombre). La unicidad es **combinatoria, no artesanal**.
+
+**Aplicación directa e inmediata para nosotros**: KayKit Adventurers es MODULAR (el ingeniero ya recortó "piezas de equipo variante" del GLB — ¡existen!). Nuestra fábrica de bandidos (Fase 3): piezas de armadura intercambiables + tintes por instancia + nombre/rasgo generados = el sabor "cada bandido es alguien" con un solo modelo base. Cero coste de assets nuevos.
+
+## 11. Animación y combate por dentro (las técnicas con nombre)
+
+- **Root motion warping** (el magnetismo técnico): la animación de ataque lleva movimiento de raíz, y el motor la **deforma en curva hacia el objetivo elegido** — por eso el héroe "vuela" metros hasta el orco correcto. Nuestra versión Three.js: al atacar, lerp de P.pos hacia el bandido objetivo durante la anticipación del clip (0–35 %), techo 2,5 m. Es EL fix técnico del combate táctil.
+- **Tokens de ataque**: de la escuela F.E.A.R./Arkham — la horda pide "permiso" para atacar; solo N enemigos (2–3) tienen token simultáneo, el resto orbita amenazando. Por eso 30 orcos no son injustos. Nuestra versión: máximo 2 bandidos con token de ataque; el resto rodea. Barato y transformador.
+- **Reacciones aditivas direccionales**: el golpe mezcla una animación aditiva según el ángulo del impacto sobre la locomoción — no interrumpe, se suma. Con nuestro mixer: capa aditiva o blend rápido del Hit_A con peso parcial.
+- **IK de pies + alineación a pendiente** en terreno irregular (nuestra capa procedural pendiente de Fase 1 va por el mismo camino).
+
+## 12. El backend real: Hydra, WBPlay y la muerte de las features
+
+La arquitectura online verificable:
+- **WBPlay** (cuenta transversal de WB) sobre la cuenta de PSN + **Hydra**, la plataforma de servicios backend interna de WB Games: identidad, entitlements, datos cross-juego y telemetría. En PC iba ligada a Denuvo.
+- **Online Conquest (SoW), la joya asíncrona**: subes TU fortaleza con TUS orcos al servidor; otros jugadores asedian una **copia defendida por IA**. PvP sin una sola línea de netcode en tiempo real — sin lag, sin servidores de partida, solo estado subido y simulación local. **Es exactamente el primer online que nuestro ROADMAP §3 debería construir**: "asedia el campamento de otro jugador" = subir un JSON del campamento, defender con IA. Orden de magnitud más barato que el multijugador vivo.
+- **Vendettas sociales** (SoM): el orco que mató a tu amigo aparece en TU mundo — otra feature asíncrona pura sobre datos compartidos.
+- **Economía server-side**: Gold, War Chests y Market (cajas con orcos y equipo) — validación en servidor. Tras el rechazo de la comunidad, **Monolith los retiró por completo en julio de 2018**: lección de diseño Y de arquitectura (la economía estaba lo bastante desacoplada como para amputarla sin matar el juego).
+- **La lección mortal**: Nemesis Forge (llevar tu némesis de Mordor a War) vivía sobre Hydra; **cuando WB retiró Hydra, todas esas features murieron para siempre** — vendettas, leaderboards, transferencias. Regla para «Acero y Corona»: **local-first** — la partida vive en el dispositivo (ya lo hace), y todo lo online que construyamos debe degradar con dignidad cuando el servidor no esté. Nada del juego base puede depender de un servidor para existir.
+
+## 13. Tabla técnica de adopción
+
+| Técnica de Monolith | Qué resuelve | Nuestra versión (stack Three.js) | Fase |
+|---|---|---|---|
+| Root motion warping | Golpear sin apuntar | Lerp al objetivo durante anticipación del clip (techo 2,5 m) | **Ya** (combate) |
+| Tokens de ataque | Hordas justas | Máx. 2 bandidos atacando; resto orbita | 2 |
+| Resolución dinámica | 30 fps sagrados | `pixelRatio` autoescalado si frame >33 ms | 2 |
+| Fábrica de composición | 100 enemigos de 1 modelo | Piezas modulares KayKit + tintes por instancia + nombre/rasgo | 3 |
+| Reacciones aditivas | Golpes con peso sin cortar | Hit_A con blend parcial sobre locomoción | 2 |
+| LOD de personajes | Población grande | Congelar mixer + malla simple a distancia | 3 |
+| PvP asíncrono (Online Conquest) | Online sin netcode | "Asedia el campamento de otro": subir JSON + defensa IA | 5 |
+| Economía desacoplada | Poder amputar sin matar | Toda feature online opcional y separable | 5 |
+| Local-first (lección Hydra) | Sobrevivir al servidor | La partida nunca depende del backend para existir | siempre |
+
 ## Fuentes
 - [Game Developer — Core System Analysis of Middle-Earth: Shadow of War](https://www.gamedeveloper.com/design/core-system-analysis-of-middle-earth-shadow-of-war) (bucle central, verbos, Nemesis, jerarquía, dominación, monturas)
 - [Kotaku — The Combat In Shadow Of Mordor Sure Feels Familiar](https://kotaku.com/the-combat-in-shadow-of-mordor-sure-feels-familiar-in-1641217162) (mapeo de botones, herencia Arkham, last chance)
 - [TheGamer — Nemesis System Complete Guide](https://www.thegamer.com/middle-earth-shadow-of-war-orc-nemesis-system-complete-guide/) · [Medium — How the Nemesis System Creates Stories](https://medium.com/@niklaseckstein/how-the-nemesis-system-creates-stories-d26754b30d2e) (memoria, promociones, cicatrices)
 - [Windows Central — Digital Foundry: Shadow of War X1X vs PS4 Pro](https://www.windowscentral.com/digital-foundry-compares-middle-earth-shadow-war-xbox-one-x) · [GamingBolt — comparativa 4K](https://gamingbolt.com/middle-earth-shadow-of-war-pc-vs-ps4-pro-vs-ps4-vs-xbox-one-graphics-comparison-in-4k) (1080p/30 estable en PS4, resolución dinámica en Pro)
 - Conocimiento de dominio del medio (patente del Nemesis por WB concedida en 2021; sistema de mercenarios de AC Odyssey como alternativa sin patente).
+
+**Fuentes de la Parte II:**
+- [Wikipedia — LithTech](https://en.wikipedia.org/wiki/LithTech) (linaje Jupiter EX→F.E.A.R.→Mordor; designación V6 con Nemesis integrado)
+- [GDC Vault — Helping Players Hate (or Love) Their Nemesis (Chris Hoge, Monolith, GDC 2018)](https://www.gdcvault.com/play/1025150/Helping-Players-Hate-(or-Love)) · [Game Developer — Upgrading the Nemesis system for Shadow of War](https://www.gamedeveloper.com/design/upgrading-the-nemesis-system-for-i-middle-earth-shadow-of-war-i-) (fábrica de composición: presets de cabeza, rasgos, tintes, armaduras, voces × personalidades)
+- [WB Games Support — Free Updates Coming to Shadow of War + FAQ](https://wbgamessupport.wbgames.com/hc/en-us/articles/1500002839382-Important-Free-Updates-Coming-to-Shadow-of-War-FAQ-04-02-2018) (retirada de Gold/War Chests/Market en julio de 2018)
+- [Game Rant — Online Conquest Mode Revealed](https://gamerant.com/middle-earth-shadow-of-war-conquest-mode/) (asedios asíncronos con fortalezas subidas y defendidas por IA)
+- [Windows Central — Digital Foundry X1X vs PS4 Pro](https://www.windowscentral.com/digital-foundry-compares-middle-earth-shadow-war-xbox-one-x) (resolución dinámica; texturas low-res en 4K)
+- Conocimiento de dominio del medio (Hydra como plataforma BaaS interna de WB y su retirada matando Nemesis Forge/vendettas; WBPlay+Denuvo en PC; tokens de ataque y root-motion warping como técnicas estándar del linaje F.E.A.R./Arkham).

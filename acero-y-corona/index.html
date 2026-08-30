@@ -174,6 +174,23 @@
   /* viñeta cinematográfica */
   #vig{position:fixed;inset:0;z-index:15;pointer-events:none;
     background:radial-gradient(ellipse at 50% 42%, transparent 55%, rgba(5,8,14,.36) 100%);}
+  /* destello de daño */
+  #hurtFlash{position:fixed;inset:0;z-index:16;pointer-events:none;opacity:0;
+    background:radial-gradient(ellipse at 50% 50%, transparent 42%, rgba(155,44,44,.6) 100%);}
+  /* texto flotante de combate */
+  .fxtext{position:fixed;z-index:21;pointer-events:none;font-family:var(--font-display);
+    font-weight:700;font-size:17px;text-shadow:0 2px 4px rgba(0,0,0,.85);
+    transform:translate(-50%,-50%);animation:fxup .9s ease-out forwards;}
+  @keyframes fxup{to{transform:translate(-50%,calc(-50% - 48px));opacity:0;}}
+  /* tienda del herrero */
+  .shop-item{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:12px 14px;border:1px solid var(--edge-soft);border-radius:4px;margin-top:10px;}
+  .shop-item .nm{font-weight:600;font-size:15px;}
+  .shop-item .ds{color:var(--ink-dim);font-size:12.5px;margin-top:2px;}
+  .buy{font-family:var(--font-display);font-weight:700;letter-spacing:.08em;font-size:12px;
+    border:1px solid var(--gold);background:rgba(201,162,75,.12);color:var(--gold-bright);
+    padding:8px 14px;border-radius:3px;cursor:pointer;white-space:nowrap;}
+  .buy:disabled{opacity:.45;cursor:default;}
 
   .spin{animation:spin 1.1s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
@@ -191,6 +208,8 @@
 
 <div id="game"></div>
 <div id="vig"></div>
+<div id="hurtFlash"></div>
+<div id="fx"></div>
 
 <!-- HUD -->
 <div id="hud">
@@ -248,6 +267,7 @@
   <p class="tagline">Un reino que explorar a caballero: el castillo, la aldea y los bosques bajo un cielo que gira del alba a la noche.</p>
   <div class="rule"></div>
   <div class="menu-row">
+    <button class="btn" id="continueBtn" hidden>Continuar Partida</button>
     <button class="btn" id="playBtn">Entrar al Reino</button>
   </div>
   <div class="menu-row" style="margin-top:14px;">
@@ -285,6 +305,24 @@
     <p>Una <b>rebanada vertical</b> (vertical slice) de un mundo abierto medieval: terreno procedural con colinas, montañas y caminos de tierra, un castillo, una aldea, bosques, ciclo día/noche dinámico, caballero en tercera persona, un <b>caballo que montar</b>, combate cuerpo a cuerpo, monedas, aldeanos, bandidos y un hilo de misiones. Superficies con texturas procedurales, agua con oleaje y nubes a la deriva.</p>
     <p class="dim">Corre en el navegador (PC y móvil) con Three.js. Es la base honesta desde la que crecer hacia la visión completa — la hoja de ruta técnica está en el repositorio (<b>docs/ROADMAP.md</b>), incluyendo cómo se diseña de verdad el <i>backend</i> de un mundo abierto en línea, sin copiar nada de nadie.</p>
     <p class="dim" style="margin-top:10px;">Obra original. No usa activos ni código de terceros; cualquier parecido con otros juegos es únicamente de género.</p>
+  </div>
+</div>
+
+<!-- Tienda del herrero -->
+<div class="sheet" id="shopSheet">
+  <div class="card">
+    <button class="close" data-close>×</button>
+    <h2>Herrero de la aldea</h2>
+    <p class="sub">Tu oro: <b id="shopGold" style="color:var(--gold-bright)">0</b></p>
+    <div class="shop-item">
+      <div><div class="nm">⚔️ Espada de acero forjado</div><div class="ds">Triplica el daño: derriba a un bandido de un solo tajo.</div></div>
+      <button class="buy" id="buySword">40 oro</button>
+    </div>
+    <div class="shop-item">
+      <div><div class="nm">🧪 Poción de vida</div><div class="ds">Restaura toda la vitalidad al instante.</div></div>
+      <button class="buy" id="buyPotion">10 oro</button>
+    </div>
+    <p class="dim" id="shopMsg" style="min-height:18px;margin:12px 0 0;"></p>
   </div>
 </div>
 
@@ -790,6 +828,48 @@ function makeTorch(x,z){
 makeTorch(5.5,46); makeTorch(-5.5,46);
 
 // ============================================================================
+//  PARTÍCULAS Y TEXTO DE COMBATE (game feel)
+// ============================================================================
+const MAXP=200;
+const pPos=new Float32Array(MAXP*3), pCol=new Float32Array(MAXP*3);
+for(let i=0;i<MAXP;i++) pPos[i*3+1]=-999;
+const partGeo=new THREE.BufferGeometry();
+partGeo.setAttribute('position',new THREE.BufferAttribute(pPos,3));
+partGeo.setAttribute('color',new THREE.BufferAttribute(pCol,3));
+const partPts=new THREE.Points(partGeo,new THREE.PointsMaterial({size:0.16,vertexColors:true,transparent:true,opacity:0.95,depthWrite:false}));
+partPts.frustumCulled=false; scene.add(partPts);
+const partData=new Array(MAXP); let pNext=0;
+function spawnBurst(x,y,z,color,n,spread){
+  const c=new THREE.Color(color); spread=spread||2.4;
+  for(let k=0;k<n;k++){ pNext=(pNext+1)%MAXP; const i=pNext;
+    pPos[i*3]=x; pPos[i*3+1]=y; pPos[i*3+2]=z;
+    pCol[i*3]=c.r; pCol[i*3+1]=c.g; pCol[i*3+2]=c.b;
+    partData[i]={vx:rand(-spread,spread),vy:rand(1.2,4.2),vz:rand(-spread,spread),life:rand(0.3,0.65)};
+  }
+}
+function updateParticles(dt){
+  for(let i=0;i<MAXP;i++){ const p=partData[i]; if(!p||p.life<=0) continue;
+    p.life-=dt; p.vy-=10*dt;
+    pPos[i*3]+=p.vx*dt; pPos[i*3+1]+=p.vy*dt; pPos[i*3+2]+=p.vz*dt;
+    if(p.life<=0) pPos[i*3+1]=-999;
+  }
+  partGeo.attributes.position.needsUpdate=true; partGeo.attributes.color.needsUpdate=true;
+}
+const fxLayer=document.getElementById('fx');
+const _fv=new THREE.Vector3();
+function floatText(pos,txt,color){
+  _fv.set(pos.x,pos.y+1.9,pos.z).project(camera);
+  if(_fv.z>1) return;
+  const d=document.createElement('div'); d.className='fxtext'; d.textContent=txt;
+  d.style.left=((_fv.x*0.5+0.5)*innerWidth)+'px';
+  d.style.top=((-_fv.y*0.5+0.5)*innerHeight)+'px';
+  d.style.color=color||'#fff';
+  fxLayer.appendChild(d); setTimeout(()=>d.remove(),950);
+}
+let hitStop=0, shakeAmp=0, hurtFlashT=0;
+function shake(a){ shakeAmp=Math.max(shakeAmp,a); }
+
+// ============================================================================
 //  HUMANOIDES (jugador, aldeanos, bandidos)
 // ============================================================================
 function humanoid(opt){
@@ -884,7 +964,7 @@ const P={
   pos:player.group.position, vel:new THREE.Vector3(), yaw:Math.PI, // mirando al castillo
   onGround:true, walkPhase:0, moveAmt:0, speed:0,
   hp:100, stamina:100, sprinting:false, attackT:0, attackCd:0, hurtCd:0,
-  coins:0
+  coins:0, swordLvl:1
 };
 
 // ============================================================================
@@ -961,11 +1041,19 @@ function spawnVillager(x,z){
 villageSpots.slice(0,7).forEach(s=>spawnVillager(s.x+rand(-3,3), s.z+rand(-3,3)));
 spawnVillager(-64,60); spawnVillager(-76,66);
 
+// mercader-herrero junto al pozo de la aldea
+const merchant=humanoid({skin:0xc78d6a,cloth:0x7a5a2a,cloth2:0x4a3a22,hair:0x555049});
+place(merchant.group,-68,61.5,0);
+merchant.group.rotation.y=2.4;
+const anvil=box(0.7,0.5,0.35,M.steel);
+anvil.position.set(-67,getHeight(-67,60.5)+0.55,60.5); anvil.castShadow=true; scene.add(anvil);
+function nearMerchant(){ return !H.mounted && Math.hypot(-68-P.pos.x,61.5-P.pos.z)<3.2; }
+
 function spawnBandit(x,z){
   const b=humanoid({skin:0xbf9a7a,cloth:0x2f2a26,cloth2:0x211d1a,hood:true,sword:true});
   place(b.group,x,z,0);
   bandits.push({rig:b, pos:new THREE.Vector3(x,getHeight(x,z),z), home:new THREE.Vector3(x,0,z),
-    vel:new THREE.Vector3(), yaw:0, alive:true, hitFlash:0, phase:Math.random()*9, wanderT:rand(0,3),
+    vel:new THREE.Vector3(), yaw:0, alive:true, hp:3, hitFlash:0, phase:Math.random()*9, wanderT:rand(0,3),
     target:new THREE.Vector3(x,0,z)});
 }
 // campamento de bandidos al noreste
@@ -1012,7 +1100,7 @@ const el=(id)=>document.getElementById(id);
 const hpFill=el('hpFill'),stFill=el('stFill'),coinCount=el('coinCount'),
   questTxt=el('questTxt'),questProg=el('questProg'),clockTxt=el('clockTxt'),clockDot=el('clockDot'),
   toast=el('toast'),toastBig=el('toastBig'),toastSmall=el('toastSmall'),
-  hint=el('hint'),hintTxt=el('hintTxt');
+  hint=el('hint'),hintTxt=el('hintTxt'),hurtEl=el('hurtFlash'),shopEl=el('shopSheet');
 let toastTimer=0;
 function showToast(big,small,dur){ toastBig.textContent=big; toastSmall.textContent=small||'';
   toast.classList.add('show'); toastTimer=dur||2.4; }
@@ -1045,9 +1133,16 @@ updateQuestHUD();
 // ============================================================================
 const keys={};
 addEventListener('keydown',e=>{ keys[e.code]=true;
-  if(e.code==='KeyP'||e.code==='Escape') togglePause();
+  if(e.code==='KeyP'||e.code==='Escape'){
+    if(shopEl.classList.contains('show')) shopEl.classList.remove('show');
+    else togglePause();
+  }
   if((e.code==='KeyJ')&&running) doAttack();
-  if((e.code==='KeyE')&&running) toggleMount();
+  if((e.code==='KeyE')&&running){
+    if(shopEl.classList.contains('show')) shopEl.classList.remove('show');
+    else if(nearMerchant()) openShop();
+    else toggleMount();
+  }
 });
 addEventListener('keyup',e=>{ keys[e.code]=false; });
 
@@ -1102,7 +1197,7 @@ if(isTouch){
     b.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();fn();},{passive:false});
     if(fnUp) b.addEventListener('touchend',e=>{e.preventDefault();fnUp();},{passive:false}); };
   bind('btnAttack',()=>{if(running)doAttack();});
-  bind('btnMount',()=>{if(running)toggleMount();});
+  bind('btnMount',()=>{ if(!running)return; if(nearMerchant()) openShop(); else toggleMount(); });
   bind('btnJump',()=>{ jumpPressed=true; });
   bind('btnSprint',()=>{ sprintHeld=true; }, ()=>{ sprintHeld=false; });
 }
@@ -1118,18 +1213,31 @@ function doAttack(){
   const fx=Math.sin(P.yaw), fz=Math.cos(P.yaw);
   bandits.forEach(b=>{ if(!b.alive)return;
     const dx=b.pos.x-P.pos.x, dz=b.pos.z-P.pos.z; const d=Math.hypot(dx,dz);
-    if(d<2.9){ const dot=(dx*fx+dz*fz)/(d||1); if(dot>0.35){ defeatBandit(b); } }
+    if(d<2.9){ const dot=(dx*fx+dz*fz)/(d||1); if(dot>0.35){ hitBandit(b, d?dx/d:0, d?dz/d:1); } }
   });
 }
+function hitBandit(b,nx,nz){
+  const dmg=P.swordLvl>=2?3:1;
+  b.hp-=dmg; b.hitFlash=0.18;
+  b.pos.x+=nx*1.1; b.pos.z+=nz*1.1;     // retroceso
+  spawnBurst(b.pos.x,getHeight(b.pos.x,b.pos.z)+1.3,b.pos.z,0xe8d9b0,10);
+  floatText(b.pos,'−'+dmg,'#e8b4b4');
+  hitStop=0.055; shake(0.35); sfxHit();
+  if(b.hp<=0) defeatBandit(b);
+}
 function defeatBandit(b){
-  b.alive=false; banditsDefeated++; sfxHit();
-  // animación de caída
-  b.falling=0.0;
+  b.alive=false; banditsDefeated++;
+  b.falling=0.0; b.respawnT=rand(40,70);
+  P.coins+=2; coinCount.textContent=P.coins;
+  floatText(b.pos,'+2 oro','#e6c877'); sfxCoin();
+  spawnBurst(b.pos.x,b.pos.y+1,b.pos.z,0xc34141,14);
   checkQuests();
 }
 function damagePlayer(amt){
   if(P.hurtCd>0) return; P.hurtCd=1.0;
   P.hp=clamp(P.hp-amt,0,100); sfxHurt();
+  hurtFlashT=0.35; shake(0.5);
+  floatText(P.pos,'−'+Math.round(amt),'#c34141');
   if(P.hp<=0){ // reaparecer en la puerta
     P.hp=100; P.pos.set(GATE.x,getHeight(GATE.x,GATE.z),GATE.z+8); P.vel.set(0,0,0);
     showToast('CAÍDO','Reapareces en la puerta del castillo',2.2);
@@ -1169,7 +1277,7 @@ const sfxCoin=()=>{ blip(880,0.08,'triangle',0.25); setTimeout(()=>blip(1320,0.1
 const sfxSwing=()=>noiseBurst(0.18,1800,0.16);
 const sfxHit=()=>{ noiseBurst(0.14,600,0.24); blip(180,0.18,'sawtooth',0.18); };
 const sfxHurt=()=>blip(150,0.22,'square',0.2);
-let stepT=0;
+let stepT=0, dustT=0;
 const sfxStep=()=>blip(90,0.06,'sine',0.08);
 
 // ============================================================================
@@ -1265,8 +1373,11 @@ function updatePlayer(dt){
   const wantJump=keys['Space']||jumpPressed; jumpPressed=false;
   const groundY=getHeight(P.pos.x,P.pos.z);
   if(P.onGround && wantJump){ P.vel.y=H.mounted?10.5:9.2; P.onGround=false; }
+  const prevVy=P.vel.y;
   P.vel.y-=26*dt; P.pos.y+=P.vel.y*dt;
-  if(P.pos.y<=groundY){ P.pos.y=groundY; P.vel.y=0; P.onGround=true; }
+  if(P.pos.y<=groundY){ P.pos.y=groundY; P.vel.y=0;
+    if(!P.onGround && prevVy<-9) spawnBurst(P.pos.x,groundY+0.2,P.pos.z,0xbfae8e,10,1.8);
+    P.onGround=true; }
   // animación de caminar
   P.moveAmt=lerp(P.moveAmt, moving?1:0, dt*10);
   P.walkPhase+=dt*P.speed*1.15;
@@ -1301,6 +1412,8 @@ function updatePlayer(dt){
     const hsw=Math.sin(horse.phase)*0.65*P.moveAmt;
     horse.legs[0].rotation.x=hsw; horse.legs[3].rotation.x=hsw;
     horse.legs[1].rotation.x=-hsw; horse.legs[2].rotation.x=-hsw;
+    if(P.speed>8 && P.onGround){ dustT-=dt; if(dustT<=0){ dustT=0.14;
+      spawnBurst(H.x-Math.sin(H.yaw)*1.2, P.pos.y+0.15, H.z-Math.cos(H.yaw)*1.2, 0xbfae8e,3,1.2); } }
     player.group.position.set(H.x,P.pos.y+0.62,H.z);
   } else {
     player.group.position.copy(P.pos);
@@ -1318,6 +1431,16 @@ function updateCamera(dt){
   if(desired.y<gy) desired.y=gy;
   camera.position.lerp(desired, 1-Math.pow(0.001,dt));
   camera.lookAt(head.x,head.y-0.2,head.z);
+  // FOV dinámico al esprintar/galopar + sacudida de impacto
+  const wantFov=(P.speed>8.5)?(H.mounted?66:60):55;
+  camera.fov+=(wantFov-camera.fov)*Math.min(1,dt*4);
+  camera.updateProjectionMatrix();
+  if(shakeAmp>0){
+    camera.position.x+=(Math.random()-0.5)*shakeAmp;
+    camera.position.y+=(Math.random()-0.5)*shakeAmp*0.6;
+    camera.position.z+=(Math.random()-0.5)*shakeAmp;
+    shakeAmp=Math.max(0,shakeAmp-dt*2.4);
+  }
 }
 
 function updateVillagers(dt){
@@ -1341,13 +1464,25 @@ function updateBandits(dt){
   bandits.forEach(b=>{
     const g=b.rig.group;
     if(!b.alive){
-      // caída
+      // caída y reaparición en el campamento
       if(b.falling!==undefined && b.falling<1){ b.falling=Math.min(1,b.falling+dt*1.6);
         g.rotation.x=b.falling*Math.PI*0.5; g.position.y=getHeight(g.position.x,g.position.z)+0.1;
         g.scale.setScalar(1-b.falling*0.15);
         if(b.falling>=1){ g.visible=false; } }
+      else {
+        b.respawnT-=dt;
+        if(b.respawnT<=0 && Math.hypot(b.home.x-P.pos.x,b.home.z-P.pos.z)>30){
+          b.alive=true; b.hp=3; b.falling=undefined;
+          b.pos.set(b.home.x+rand(-3,3),0,b.home.z+rand(-3,3));
+          b.pos.y=getHeight(b.pos.x,b.pos.z);
+          g.visible=true; g.rotation.x=0; g.scale.setScalar(1);
+        }
+      }
       return;
     }
+    if(b.hitFlash>0){ b.hitFlash-=dt;
+      g.scale.setScalar(1+0.14*Math.max(0,b.hitFlash)/0.18);
+      if(b.hitFlash<=0) g.scale.setScalar(1); }
     const dToP=b.pos.distanceTo(P.pos);
     let tx,tz,sp;
     if(dToP<16){ // persigue al jugador
@@ -1374,7 +1509,10 @@ function updateCoins(dt){
   coins.forEach(c=>{ if(c.taken)return;
     c.mesh.rotation.y+=dt*2.2; c.mesh.position.y=getHeight(c.mesh.position.x,c.mesh.position.z)+1.1+Math.sin(performance.now()*0.003+c.spin)*0.15;
     if(Math.hypot(c.mesh.position.x-P.pos.x,c.mesh.position.z-P.pos.z)<2.2){
-      c.taken=true; c.mesh.visible=false; P.coins++; sfxCoin(); coinCount.textContent=P.coins; checkQuests();
+      c.taken=true; c.mesh.visible=false; P.coins++; sfxCoin(); coinCount.textContent=P.coins;
+      floatText(c.mesh.position,'+1','#e6c877');
+      spawnBurst(c.mesh.position.x,c.mesh.position.y,c.mesh.position.z,0xffd75e,8,1.4);
+      checkQuests();
     }
   });
 }
@@ -1393,8 +1531,11 @@ function updateHint(){
   let near=null,nd=99;
   bandits.forEach(b=>{ if(!b.alive)return; const d=b.pos.distanceTo(P.pos); if(d<5&&d<nd){nd=d;near=b;} });
   if(near){ show=true; txt = isTouch?'Pulsa <b>⚔️</b> para atacar':'<b>Clic</b> o <b>J</b> para atacar'; }
+  else if(nearMerchant()){ show=true; txt = isTouch?'Pulsa <b>🛒</b> para comerciar':'<b>E</b> para hablar con el herrero'; }
   else if(nearHorse()){ show=true; txt = isTouch?'Pulsa <b>🐴</b> para montar':'<b>E</b> para montar a caballo'; }
-  if(isTouch) el('btnMount').classList.toggle('on', nearHorse()||H.mounted);
+  if(isTouch){ const cb=el('btnMount');
+    cb.classList.toggle('on', nearHorse()||H.mounted||nearMerchant());
+    cb.textContent=nearMerchant()?'🛒':'🐴'; }
   if(show){ hintTxt.innerHTML=txt; hint.classList.add('show'); } else hint.classList.remove('show');
 }
 
@@ -1441,13 +1582,18 @@ function drawMinimap(){
 // ============================================================================
 function frame(){
   requestAnimationFrame(frame);
-  const dt=Math.min(clock.getDelta(),0.05);
-  if(running && !paused){
+  let dt=Math.min(clock.getDelta(),0.05);
+  if(hitStop>0){ hitStop-=dt; dt=0; }   // congelación de impacto
+  const shopOpen=shopEl.classList.contains('show');
+  if(hurtFlashT>0) hurtFlashT-=dt;
+  hurtEl.style.opacity=hurtFlashT>0?(hurtFlashT/0.35*0.6):0;
+  if(running && !paused && !shopOpen){
     updatePlayer(dt);
     updateVillagers(dt);
     updateBandits(dt);
     updateCoins(dt);
     updateFires(dt);
+    updateParticles(dt);
     updateWater(performance.now()*0.001);
     updateSky(dt);
     checkQuests();
@@ -1480,7 +1626,55 @@ function togglePause(){
   el('btnPause').textContent=paused?'▶':'❚❚';
   if(paused){ showToast('PAUSA',''); toastTimer=9999; } else { toast.classList.remove('show'); toastTimer=0; }
 }
-el('playBtn').addEventListener('click',startGame);
+el('playBtn').addEventListener('click',()=>{ try{localStorage.removeItem(SAVE_KEY);}catch(e){} startGame(); });
+el('continueBtn').addEventListener('click',()=>{ loadGame(); startGame(); });
+
+// ----- tienda del herrero -----
+function refreshShop(){
+  el('shopGold').textContent=P.coins;
+  const bs=el('buySword');
+  if(P.swordLvl>=2){ bs.disabled=true; bs.textContent='Forjada'; }
+}
+function openShop(){ refreshShop(); el('shopMsg').textContent=''; shopEl.classList.add('show'); }
+el('buySword').addEventListener('click',()=>{
+  if(P.swordLvl>=2) return;
+  if(P.coins<40){ el('shopMsg').textContent='Te faltan '+(40-P.coins)+' monedas de oro.'; return; }
+  P.coins-=40; P.swordLvl=2; coinCount.textContent=P.coins; sfxCoin();
+  el('shopMsg').textContent='La hoja recién forjada silba en tu mano.'; refreshShop();
+});
+el('buyPotion').addEventListener('click',()=>{
+  if(P.coins<10){ el('shopMsg').textContent='Te faltan '+(10-P.coins)+' monedas de oro.'; return; }
+  if(P.hp>=99.5){ el('shopMsg').textContent='Ya estás al máximo de vitalidad.'; return; }
+  P.coins-=10; P.hp=100; coinCount.textContent=P.coins; sfxCoin();
+  el('shopMsg').textContent='Recuperas todo tu vigor.'; refreshShop();
+});
+
+// ----- guardado local -----
+const SAVE_KEY='ayc_save_v1';
+function saveGame(){ if(!running) return;
+  try{ localStorage.setItem(SAVE_KEY,JSON.stringify({
+    c:P.coins, s:P.swordLvl, h:Math.round(P.hp), d:banditsDefeated, q:questIdx, w:gameWon?1:0,
+    x:Math.round(P.pos.x*10)/10, z:Math.round(P.pos.z*10)/10, t:Math.round(timeOfDay*1000)/1000,
+    m:H.mounted?1:0, hx:Math.round(H.x), hz:Math.round(H.z) })); }catch(e){}
+}
+setInterval(saveGame,5000);
+function loadGame(){
+  let s=null; try{ s=JSON.parse(localStorage.getItem(SAVE_KEY)); }catch(e){}
+  if(!s) return false;
+  P.coins=s.c|0; P.swordLvl=s.s||1; P.hp=s.h||100;
+  banditsDefeated=s.d|0; questIdx=Math.min(s.q|0,quests.length); gameWon=!!s.w;
+  for(let i=0;i<Math.min(questIdx,quests.length);i++) quests[i].done=true;
+  if(questIdx>=quests.length) gameWon=true;
+  timeOfDay=(typeof s.t==='number')?s.t:0.3;
+  P.pos.set(typeof s.x==='number'?s.x:GATE.x, 0, typeof s.z==='number'?s.z:GATE.z+8);
+  P.pos.y=getHeight(P.pos.x,P.pos.z);
+  if(s.m){ H.mounted=true; H.x=P.pos.x; H.z=P.pos.z; }
+  else if(typeof s.hx==='number'){ H.x=s.hx; H.z=s.hz;
+    horse.group.position.set(H.x,getHeight(H.x,H.z),H.z); }
+  coinCount.textContent=P.coins; updateQuestHUD();
+  return true;
+}
+try{ if(localStorage.getItem(SAVE_KEY)) el('continueBtn').hidden=false; }catch(e){}
 el('btnPause').addEventListener('click',togglePause);
 el('btnSound').addEventListener('click',()=>{ soundOn=!soundOn;
   if(masterGain) masterGain.gain.value=soundOn?0.5:0; el('btnSound').textContent=soundOn?'♪':'✕'; el('btnSound').style.opacity=soundOn?1:0.5; });
@@ -1500,7 +1694,7 @@ updateCamera(0.016);
 renderer.render(scene,camera);
 el('boot').style.display='none';
 // gancho mínimo para pruebas automatizadas
-window.__ayc={P,H,toggleMount,setTime:t=>{timeOfDay=t;}};
+window.__ayc={P,H,bandits,toggleMount,openShop,nearMerchant,setTime:t=>{timeOfDay=t;},kills:()=>banditsDefeated};
 frame();
 
 })();

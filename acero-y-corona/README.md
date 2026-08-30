@@ -28,7 +28,9 @@
 
 ---
 
-## 🏰 Qué incluye el prototipo (v0.3)
+## 🏰 Qué incluye el prototipo (v0.4)
+
+> **v0.4 — pase de *game feel* y bucle de juego**: bandidos con vida (3 golpes), retroceso, congelación de impacto, sacudida de cámara, números de daño y chispas; los bandidos sueltan oro y **reaparecen** en sus campamentos; **herrero en la aldea** (espada forjada que mata de un tajo, pociones); FOV dinámico al galopar, polvo, destello rojo al recibir daño; y **partida guardada** con botón «Continuar» en el menú.
 
 > **v0.3 — pase de dirección de arte** inspirado en los juegos de El Señor de los Anillos (ver [`docs/REFERENCIAS.md`](docs/REFERENCIAS.md)): personajes y caballo reconstruidos con volúmenes redondeados y proporciones reales, iluminación de 3 puntos con luz de borde, paleta saturada, ventanas que se encienden de noche, antorchas, flores, árboles de 9–14 m con color por instancia, castillo a escala (~14 m de muralla) y grade cinematográfico.
 

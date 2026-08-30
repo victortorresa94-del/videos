@@ -2,6 +2,8 @@
 
 **Prototipo jugable de mundo abierto medieval** — corre en el navegador, en PC y móvil, con un solo archivo (`index.html`) y sin instalación.
 
+> 🏛️ **Esto ya es un proyecto de estudio, no un experimento**: plan de meses por fases en [`docs/PLAN-MAESTRO.md`](docs/PLAN-MAESTRO.md), consejo de dirección y equipo de agentes en `.claude/` (skills `gamedev-*` + agentes desplegables), decisiones en [`docs/DECISIONES.md`](docs/DECISIONES.md).
+
 > Nota honesta sobre el encargo: se pidió "crear un GTA 6 medieval y robar el backend de GTA 6".
 > **No se ha copiado ni un byte de GTA 6** (es código propietario de Rockstar/Take‑Two, ni siquiera publicado; copiarlo sería ilegal). Tampoco es posible entregar de una vez un AAA de mundo abierto de esa escala: son cientos de personas, varios años y cientos de millones de dólares.
 > Lo que **sí** es este repositorio: una **rebanada vertical** honesta y funcional del concepto, más un plan realista y documentado para hacerlo crecer hacia esa visión — incluyendo cómo se diseña de verdad el *backend* de un mundo abierto en línea (conocimiento público de ingeniería). Ver [`docs/ROADMAP.md`](docs/ROADMAP.md) y [`docs/GDD.md`](docs/GDD.md).

@@ -32,6 +32,7 @@
     touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none;}
   #game{position:fixed;inset:0;}
   #game canvas{display:block;position:fixed;inset:0;}
+  @media (min-width:820px){ #game canvas{filter:saturate(1.22) contrast(1.05);} }
   #minimap{display:block;}
 
   /* ---------- Pantalla de título ---------- */
@@ -341,9 +342,9 @@ function getHeight(x,z){
   // montañas en el borde para cerrar el mundo
   const edge=Math.max(Math.abs(x),Math.abs(z))/HALF;
   h+=Math.pow(Math.max(0,(edge-0.68)/0.32),2.1)*82;
-  // meseta llana bajo el castillo
+  // meseta llana bajo el castillo (ancha: el castillo corona la silueta)
   const d=Math.hypot(x,z);
-  const t=smoothstep(34,74,d);
+  const t=smoothstep(48,88,d);
   h=1.6*(1-t)+h*t;
   return h;
 }
@@ -366,8 +367,8 @@ renderer.toneMappingExposure=1.02;
 container.appendChild(renderer.domElement);
 
 const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(60,window.innerWidth/window.innerHeight,0.5,2200);
-scene.fog=new THREE.Fog(0x93a7bd, 70, 470);
+const camera=new THREE.PerspectiveCamera(55,window.innerWidth/window.innerHeight,0.5,2200);
+scene.fog=new THREE.Fog(0x9db4cc, 90, 650);
 
 // --- cielo (domo con degradado por shader) ---
 const skyUniforms={ top:{value:new THREE.Color(0x2c6bb0)}, bottom:{value:new THREE.Color(0xbcd4ec)},
@@ -415,7 +416,7 @@ const sunGlow=new THREE.Sprite(new THREE.SpriteMaterial({map:texGlow,transparent
 sunGlow.scale.set(260,260,1); scene.add(sunGlow);
 
 // luces
-const hemi=new THREE.HemisphereLight(0xbfd4ef,0x4a4636,0.9); scene.add(hemi);
+const hemi=new THREE.HemisphereLight(0xbfd4ef,0x57503c,0.8); scene.add(hemi);
 const sun=new THREE.DirectionalLight(0xfff1d6,2.1);
 sun.castShadow=true;
 sun.shadow.mapSize.set(isMobile?1024:2048, isMobile?1024:2048);
@@ -423,14 +424,17 @@ sun.shadow.camera.near=1; sun.shadow.camera.far=420;
 const SH=110; sun.shadow.camera.left=-SH;sun.shadow.camera.right=SH;sun.shadow.camera.top=SH;sun.shadow.camera.bottom=-SH;
 sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.6;
 scene.add(sun); scene.add(sun.target);
-const ambient=new THREE.AmbientLight(0x3a4258,0.35); scene.add(ambient);
+const ambient=new THREE.AmbientLight(0x2c3550,0.3); scene.add(ambient);
+// luz de borde (rim): fría, opuesta al sol — esquema de 3 puntos
+const rim=new THREE.DirectionalLight(0xa8c4ff,0.5);
+scene.add(rim); scene.add(rim.target);
 
 // ============================================================================
 //  TERRENO
 // ============================================================================
 // caminos de tierra (polilíneas): se pintan en el terreno y se mantienen despejados
-const pathA=[[0,38],[-16,46],[-36,52],[-56,58],[-70,64]];        // puerta → aldea
-const pathB=[[0,38],[20,16],[44,-8],[62,-26],[78,-36]];          // puerta → campamento
+const pathA=[[0,46],[-16,50],[-36,54],[-56,58],[-70,64]];        // puerta → aldea
+const pathB=[[0,46],[24,20],[44,-8],[62,-26],[78,-36]];          // puerta → campamento
 function distToPath(x,z,pts){
   let dm=1e9;
   for(let i=0;i<pts.length-1;i++){
@@ -447,8 +451,8 @@ const terrGeo=new THREE.PlaneGeometry(WORLD,WORLD,SEG,SEG);
 terrGeo.rotateX(-Math.PI/2);
 {
   const pos=terrGeo.attributes.position, col=[];
-  const cGrass=new THREE.Color(0x5f7d43), cGrass2=new THREE.Color(0x6f8a4a),
-        cRock=new THREE.Color(0x6b6357), cSand=new THREE.Color(0xb7a377),
+  const cGrass=new THREE.Color(0x4e7a33), cGrass2=new THREE.Color(0x74a04b),
+        cRock=new THREE.Color(0x74685c), cSand=new THREE.Color(0xc2ab7a),
         cSnow=new THREE.Color(0xdfe6ea), cDark=new THREE.Color(0x415a35),
         cPath=new THREE.Color(0x8b7355);
   for(let i=0;i<pos.count;i++){
@@ -569,7 +573,7 @@ const texThatch=canvasTex(128,128,(g,w,h)=>{
     g.beginPath(); g.moveTo(x,y); g.lineTo(x+rand(-3,3),y+8+Math.random()*10); g.stroke(); }
 },3,2);
 const texGround=canvasTex(256,256,(g,w,h)=>{
-  g.fillStyle='#b9b9ad'; g.fillRect(0,0,w,h);   // gris claro: modula los colores de vértice
+  g.fillStyle='#cfccbd'; g.fillRect(0,0,w,h);   // claro y cálido: deja que el color de vértice mande
   speckle(g,w,h,3000,0.12,0.10);
   for(let i=0;i<120;i++){ g.fillStyle='rgba(70,80,50,'+(Math.random()*0.12)+')';
     const r=4+Math.random()*14; g.beginPath(); g.arc(Math.random()*w,Math.random()*h,r,0,TAU); g.fill(); }
@@ -584,6 +588,8 @@ M.thatch.map=texThatch; M.thatch.color.set(0xffffff);
 M.roofRed.map=texRoof; M.roofRed.color.set(0xa4453a);
 M.roofBlue.map=texRoof; M.roofBlue.color.set(0x51637f);
 terrain.material.map=texGround; terrain.material.needsUpdate=true;
+// ventanas que se encienden de noche (intensidad animada en updateSky)
+const winMat=new THREE.MeshStandardMaterial({color:0x2a2318,emissive:0xffb54a,emissiveIntensity:0.1,roughness:.6});
 
 function box(w,h,d,mat){ return new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); }
 function cyl(rt,rb,h,mat,seg){ return new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg||10),mat); }
@@ -654,18 +660,19 @@ function buildCastle(){
   return c;
 }
 const castle=buildCastle();
-// posicionar el castillo sobre la meseta
+// posicionar el castillo sobre la meseta, escalado a proporción real (~14 m de muralla)
 castle.position.set(0, getHeight(0,0), 0);
+castle.scale.set(1.25,1.32,1.25);
 castle.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
 scene.add(castle);
-const GATE={x:0, z:34}; // punto de la puerta (frente al castillo)
+const GATE={x:0, z:44}; // punto de la puerta (frente al castillo escalado)
 
 // ============================================================================
 //  ALDEA
 // ============================================================================
 function house(w,d,mat,roofMat){
   const g=new THREE.Group();
-  const wallH=3.4;
+  const wallH=4.2;
   const body=box(w,wallH,d,mat||M.plaster); body.position.y=wallH/2; g.add(body);
   // entramado de madera
   const beam=(x,y,z,bw,bh,bd)=>{const m=box(bw,bh,bd,M.woodD);m.position.set(x,y,z);g.add(m);};
@@ -674,8 +681,11 @@ function house(w,d,mat,roofMat){
   // tejado a dos aguas
   const roof=cone(Math.max(w,d)*0.86,2.6,roofMat||M.thatch,4);
   roof.rotation.y=Math.PI/4; roof.scale.set(1,1,d/w); roof.position.y=wallH+1.1; g.add(roof);
-  // puerta
-  const door=box(1,2,0.1,M.woodD); door.position.set(0,1,d/2+0.06); g.add(door);
+  // puerta y ventanas (encendidas de noche)
+  const door=box(1.1,2.2,0.1,M.woodD); door.position.set(0,1.1,d/2+0.06); g.add(door);
+  const win1=box(0.55,0.6,0.08,winMat); win1.position.set(-w/4,2.6,d/2+0.03);
+  const win2=win1.clone(); win2.position.x=w/4;
+  g.add(win1,win2);
   return g;
 }
 const roofMats=[M.roofRed,M.thatch,M.roofBlue];
@@ -722,35 +732,62 @@ function scatterPositions(count,test,sMin,sMax){
   }
   return pts;
 }
-function instancedFrom(geo,mat,pts,yOff){
+function instancedFrom(geo,mat,pts,yOff,colorFn){
   const mesh=new THREE.InstancedMesh(geo,mat,pts.length);
   mesh.castShadow=true; mesh.receiveShadow=true;
   const mtx=new THREE.Matrix4(), q=new THREE.Quaternion(), e=new THREE.Euler();
   pts.forEach((p,i)=>{ e.set(0,p.rot,0); q.setFromEuler(e);
     mtx.compose(new THREE.Vector3(p.x,p.y+(yOff?yOff(p.s):0),p.z),q,new THREE.Vector3(p.s,p.s*p.sy,p.s));
-    mesh.setMatrixAt(i,mtx); });
+    mesh.setMatrixAt(i,mtx);
+    if(colorFn) mesh.setColorAt(i,colorFn(i)); });
+  if(colorFn) mesh.instanceColor.needsUpdate=true;
   scene.add(mesh); return mesh;
 }
-const trunkGeo=new THREE.CylinderGeometry(0.22,0.32,3.4,6); trunkGeo.translate(0,1.7,0);
-const pineGeo=new THREE.ConeGeometry(2.1,4.6,7); pineGeo.translate(0,5.4,0);
-const pineGeo2=new THREE.ConeGeometry(1.5,3.0,7); pineGeo2.translate(0,7.5,0);
-const oakGeo=new THREE.IcosahedronGeometry(2.3,0); oakGeo.translate(0,4.6,0);
+// árboles a escala real (9–14 m) con color variado por instancia
+const leafMatI=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.95,flatShading:true});
+const colorize=(pts,fn)=>pts.map(()=>{const c=new THREE.Color(); fn(c); return c;});
+const pineHue=(c)=>c.setHSL(rand(0.26,0.33),rand(0.4,0.55),rand(0.22,0.34));
+const oakHue=(c)=>c.setHSL(rand(0.2,0.3),rand(0.42,0.58),rand(0.3,0.42));
+const trunkGeo=new THREE.CylinderGeometry(0.16,0.3,5.6,7); trunkGeo.translate(0,2.8,0);
+const pineGeo=new THREE.ConeGeometry(2.4,5.6,8); pineGeo.translate(0,7.6,0);
+const pineGeo2=new THREE.ConeGeometry(1.7,4.0,8); pineGeo2.translate(0,10.6,0);
+const oakGeo=new THREE.IcosahedronGeometry(2.6,1); oakGeo.translate(0,6.6,0);
 const treeCount=isMobile?150:280;
-const pinePts=scatterPositions(treeCount,(x,z)=>vnoise(x*0.03,z*0.03)>0.42);
+const pinePts=scatterPositions(treeCount,(x,z)=>vnoise(x*0.03,z*0.03)>0.42,0.9,1.6);
+const pineCols=colorize(pinePts,pineHue);
 instancedFrom(trunkGeo,M.woodD,pinePts);
-instancedFrom(pineGeo,M.leaf,pinePts);
-instancedFrom(pineGeo2,M.leaf,pinePts);
-const oakPts=scatterPositions(Math.floor(treeCount*0.5),(x,z)=>vnoise(x*0.05+9,z*0.05)>0.5);
+instancedFrom(pineGeo,leafMatI,pinePts,null,(i)=>pineCols[i]);
+instancedFrom(pineGeo2,leafMatI,pinePts,null,(i)=>pineCols[i]);
+const oakPts=scatterPositions(Math.floor(treeCount*0.5),(x,z)=>vnoise(x*0.05+9,z*0.05)>0.5,0.9,1.5);
+const oakCols=colorize(oakPts,oakHue);
 instancedFrom(trunkGeo,M.woodD,oakPts);
-instancedFrom(oakGeo,M.leaf2,oakPts);
-// rocas y arbustos
+instancedFrom(oakGeo,leafMatI,oakPts,null,(i)=>oakCols[i]);
+// rocas, arbustos y flores de pradera
 const rockGeo=new THREE.DodecahedronGeometry(1,0);
 instancedFrom(rockGeo,M.rock,scatterPositions(isMobile?60:110,null,0.6,2.2),(s)=>s*0.35);
 const bushGeo=new THREE.IcosahedronGeometry(0.8,0);
-instancedFrom(bushGeo,M.leaf2,scatterPositions(isMobile?70:140,null,0.6,1.4),(s)=>s*0.4);
+const bushPts=scatterPositions(isMobile?70:140,null,0.6,1.4);
+const bushCols=colorize(bushPts,oakHue);
+instancedFrom(bushGeo,leafMatI,bushPts,(s)=>s*0.4,(i)=>bushCols[i]);
+const flowerGeo=new THREE.IcosahedronGeometry(0.09,0);
+const flPts=scatterPositions(isMobile?150:320,(x,z)=>vnoise(x*0.09+4,z*0.09)>0.55,0.7,1.3);
+const flCols=flPts.map(()=>{const c=new THREE.Color(); const r=Math.random();
+  if(r<0.4)c.set(0xe9e2cf); else if(r<0.75)c.set(0xd9b84a); else c.set(0xb0517a); return c;});
+const flowers=instancedFrom(flowerGeo,leafMatI,flPts,(s)=>s*0.08,(i)=>flCols[i]);
+flowers.castShadow=false;
 
 // hogueras adicionales (junto a los campamentos)
 makeCampfire(70,-40); makeCampfire(-30,-80);
+// antorchas flanqueando la puerta del castillo
+function makeTorch(x,z){
+  const g=new THREE.Group();
+  const pole=cyl(0.05,0.06,1.7,M.woodD,6); pole.position.y=0.85; g.add(pole);
+  const cup=cyl(0.09,0.05,0.12,M.steel,8); cup.position.y=1.72; g.add(cup);
+  const flame=cone(0.18,0.5,M.fire,6); flame.position.y=2.0; g.add(flame);
+  const light=new THREE.PointLight(0xff9a3a,1.7,13,2); light.position.y=2.0; g.add(light);
+  place(g,x,z,0); fires.push({flame,light,base:1.0,seed:Math.random()*9});
+}
+makeTorch(5.5,46); makeTorch(-5.5,46);
 
 // ============================================================================
 //  HUMANOIDES (jugador, aldeanos, bandidos)
@@ -758,51 +795,80 @@ makeCampfire(70,-40); makeCampfire(-30,-80);
 function humanoid(opt){
   opt=opt||{};
   const g=new THREE.Group();
-  const skin=new THREE.MeshStandardMaterial({color:opt.skin||0xd9a888,roughness:.8});
+  const skin=new THREE.MeshStandardMaterial({color:opt.skin||0xd9a888,roughness:.75});
   const cloth=new THREE.MeshStandardMaterial({color:opt.cloth||0x6b7a4a,roughness:.9});
   const cloth2=new THREE.MeshStandardMaterial({color:opt.cloth2||opt.cloth||0x4a5436,roughness:.9});
-  // torso
-  const torso=box(0.66,0.82,0.38,cloth); torso.position.y=1.18; g.add(torso);
-  // cabeza + casco/pelo
-  const head=box(0.34,0.34,0.34,skin); head.position.y=1.78; g.add(head);
-  if(opt.helmet){ const hel=box(0.4,0.26,0.4,M.steel); hel.position.y=1.9; g.add(hel);
-    const nose=box(0.08,0.28,0.06,M.steel); nose.position.set(0,1.78,0.19); g.add(nose);
-    const plume=cone(0.09,0.4,M.banner,6); plume.position.y=2.2; g.add(plume); }
-  else { const hair=box(0.38,0.16,0.38,new THREE.MeshStandardMaterial({color:opt.hair||0x3a2a1c,roughness:1})); hair.position.y=1.9; g.add(hair); }
-  // piernas (grupos con pivote en cadera)
+  const sph=(r,mat)=>new THREE.Mesh(new THREE.SphereGeometry(r,12,10),mat);
+  // tronco redondeado: cadera + cintura + pecho
+  const hips=cyl(0.13,0.145,0.3,cloth2,10); hips.position.y=1.02; g.add(hips);
+  const waist=cyl(0.145,0.13,0.22,cloth,10); waist.position.y=1.17; g.add(waist);
+  const chest=sph(0.185,cloth); chest.scale.set(1.1,1.05,0.78); chest.position.y=1.36; g.add(chest);
+  // cuello y cabeza
+  const neck=cyl(0.05,0.06,0.09,skin,8); neck.position.y=1.56; g.add(neck);
+  const head=sph(0.115,skin); head.position.y=1.7; g.add(head);
+  if(opt.helmet){
+    const hel=cyl(0.125,0.125,0.13,M.steel,12); hel.position.y=1.74; g.add(hel);
+    const dome=sph(0.125,M.steel); dome.scale.y=0.75; dome.position.y=1.8; g.add(dome);
+    const nose=box(0.045,0.16,0.03,M.steel); nose.position.set(0,1.68,0.115); g.add(nose);
+    const plume=cone(0.07,0.34,M.banner,8); plume.position.y=2.02; g.add(plume);
+    const pl=sph(0.095,M.steel), pr=sph(0.095,M.steel);
+    pl.scale.set(1,0.7,1); pr.scale.set(1,0.7,1);
+    pl.position.set(-0.24,1.5,0); pr.position.set(0.24,1.5,0); g.add(pl,pr);
+  } else if(opt.hood){
+    const hood=cone(0.15,0.3,cloth2,8); hood.position.y=1.78; g.add(hood);
+  } else {
+    const hair=sph(0.12,new THREE.MeshStandardMaterial({color:opt.hair||0x3a2a1c,roughness:1}));
+    hair.scale.y=0.75; hair.position.y=1.76; g.add(hair);
+  }
+  // piernas (pivote en cadera, volúmenes cilíndricos)
+  const mkLeg=()=>{ const lg=new THREE.Group();
+    const thigh=cyl(0.07,0.078,0.42,cloth2,8); thigh.position.y=-0.21;
+    const knee=sph(0.068,cloth2); knee.position.y=-0.43;
+    const shin=cyl(0.052,0.065,0.4,cloth2,8); shin.position.y=-0.63;
+    const boot=box(0.13,0.09,0.25,M.woodD); boot.position.set(0,-0.86,0.045);
+    lg.add(thigh,knee,shin,boot); return lg; };
   const legL=new THREE.Group(), legR=new THREE.Group();
-  legL.position.set(-0.17,0.78,0); legR.position.set(0.17,0.78,0);
-  const mkLeg=()=>{const l=box(0.22,0.72,0.24,cloth2); l.position.y=-0.36; const boot=box(0.24,0.18,0.3,M.woodD); boot.position.set(0,-0.74,0.03); const gg=new THREE.Group(); gg.add(l,boot); return gg;};
+  legL.position.set(-0.105,0.92,0); legR.position.set(0.105,0.92,0);
   legL.add(mkLeg()); legR.add(mkLeg()); g.add(legL,legR);
   // brazos (pivote en hombro)
+  const mkArm=(mat)=>{ const ar=new THREE.Group();
+    const up=cyl(0.052,0.06,0.32,mat||cloth,8); up.position.y=-0.16;
+    const elbow=sph(0.052,mat||cloth); elbow.position.y=-0.33;
+    const fore=cyl(0.045,0.05,0.3,skin,8); fore.position.y=-0.49;
+    const hand=sph(0.052,skin); hand.position.y=-0.66;
+    ar.add(up,elbow,fore,hand); return ar; };
   const armL=new THREE.Group(), armR=new THREE.Group();
-  armL.position.set(-0.4,1.5,0); armR.position.set(0.4,1.5,0);
-  const mkArm=(m)=>{const a=box(0.18,0.66,0.2,m||cloth); a.position.y=-0.33; const hand=box(0.16,0.16,0.16,skin); hand.position.y=-0.68; const gg=new THREE.Group(); gg.add(a,hand); return gg;};
-  armL.add(mkArm()); armR.add(mkArm()); g.add(armL,armR);
-  // capa
-  if(opt.cape){ const cape=box(0.62,0.9,0.06,new THREE.MeshStandardMaterial({color:opt.cape,roughness:.8,side:THREE.DoubleSide}));
-    cape.position.set(0,1.15,-0.24); g.add(cape);
-    const tab=box(0.5,0.7,0.05,new THREE.MeshStandardMaterial({color:0x9b2c2c,roughness:.85}));
-    tab.position.set(0,1.05,0.22); g.add(tab);
-    const belt=box(0.68,0.1,0.4,M.woodD); belt.position.y=0.95; g.add(belt); }
-  // espada + escudo para el jugador/bandido
+  armL.position.set(-0.245,1.47,0); armR.position.set(0.245,1.47,0);
+  const armLimbL=mkArm(), armLimbR=mkArm();
+  armL.add(armLimbL); armR.add(armLimbR); g.add(armL,armR);
+  // capa, tabardo con ribete dorado y cinto
+  if(opt.cape){
+    const cape=box(0.4,0.72,0.035,new THREE.MeshStandardMaterial({color:opt.cape,roughness:.85,side:THREE.DoubleSide}));
+    cape.position.set(0,1.14,-0.17); cape.rotation.x=0.06; g.add(cape);
+    const tab=box(0.26,0.5,0.03,new THREE.MeshStandardMaterial({color:0x9b2c2c,roughness:.85}));
+    tab.position.set(0,1.1,0.15); g.add(tab);
+    const trim=box(0.26,0.05,0.032,M.gold); trim.position.set(0,1.33,0.152); g.add(trim);
+    const belt=box(0.3,0.05,0.22,M.woodD); belt.position.y=1.04; g.add(belt);
+  }
+  // espada y escudo redondo con umbo
   let sword=null;
   if(opt.sword){
     sword=new THREE.Group();
-    const blade=box(0.08,1.05,0.03,M.steel); blade.position.y=0.5;
-    const guard=box(0.34,0.09,0.09,M.gold); guard.position.y=0.02;
-    const grip=box(0.07,0.28,0.07,M.woodD); grip.position.y=-0.16;
-    const pommel=box(0.11,0.11,0.11,M.gold); pommel.position.y=-0.32;
+    const blade=box(0.05,0.82,0.016,M.steel); blade.position.y=0.42;
+    const guard=box(0.22,0.05,0.05,M.gold); guard.position.y=0.01;
+    const grip=cyl(0.025,0.025,0.18,M.woodD,8); grip.position.y=-0.11;
+    const pommel=sph(0.045,M.gold); pommel.position.y=-0.22;
     sword.add(blade,guard,grip,pommel);
-    sword.position.set(0,-0.66,0.05); sword.rotation.x=-0.2; armR.children[0].add(sword);
+    sword.position.set(0,-0.68,0.04); sword.rotation.x=-0.25; armLimbR.add(sword);
   }
   if(opt.shield){
     const sh=new THREE.Group();
-    const board=box(0.62,0.8,0.08,new THREE.MeshStandardMaterial({color:0x6a4a2a,roughness:.85}));
-    const cross=box(0.5,0.14,0.02,M.gold); cross.position.z=0.05;
-    const crossV=box(0.14,0.66,0.02,M.gold); crossV.position.z=0.05;
-    sh.add(board,cross,crossV);
-    sh.position.set(0,-0.34,0.16); sh.rotation.y=Math.PI/2*0.15; armL.children[0].add(sh);
+    const board=cyl(0.27,0.27,0.035,new THREE.MeshStandardMaterial({color:0x6a4a2a,roughness:.85}),16);
+    board.rotation.x=Math.PI/2;
+    const rimSh=new THREE.Mesh(new THREE.TorusGeometry(0.26,0.02,8,20),M.steel);
+    const boss=sph(0.06,M.steel); boss.position.z=0.035;
+    sh.add(board,rimSh,boss);
+    sh.position.set(0,-0.42,0.1); sh.rotation.y=0.25; armLimbL.add(sh);
   }
   g.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
   return {group:g, legL,legR,armL,armR, sword};
@@ -826,27 +892,36 @@ const P={
 // ============================================================================
 function makeHorse(){
   const g=new THREE.Group();
-  const hide=new THREE.MeshStandardMaterial({color:0x6d4a2f,roughness:.9});
+  const hide=new THREE.MeshStandardMaterial({color:0x6d4a2f,roughness:.85});
   const dark=new THREE.MeshStandardMaterial({color:0x33251a,roughness:.95});
-  const body=box(0.95,1.0,2.3,hide); body.position.y=1.45; g.add(body);
-  const chest=box(0.85,0.85,0.6,hide); chest.position.set(0,1.5,1.25); g.add(chest);
-  const neck=box(0.42,1.0,0.55,hide); neck.position.set(0,2.15,1.35); neck.rotation.x=0.45; g.add(neck);
-  const head=box(0.38,0.42,0.9,hide); head.position.set(0,2.7,1.75); g.add(head);
-  const muzzle=box(0.3,0.3,0.35,dark); muzzle.position.set(0,2.6,2.2); g.add(muzzle);
-  const earL=box(0.09,0.25,0.09,hide); earL.position.set(-0.12,3.0,1.6);
-  const earR=earL.clone(); earR.position.x=0.12; g.add(earL,earR);
-  const mane=box(0.12,0.9,0.5,dark); mane.position.set(0,2.35,1.15); mane.rotation.x=0.45; g.add(mane);
-  const tail=box(0.16,0.9,0.16,dark); tail.position.set(0,1.4,-1.25); tail.rotation.x=-0.5; g.add(tail);
-  const blanket=box(1.1,0.1,1.1,new THREE.MeshStandardMaterial({color:0x9b2c2c,roughness:.85}));
-  blanket.position.y=1.98; g.add(blanket);
-  const saddle=box(0.6,0.22,0.85,new THREE.MeshStandardMaterial({color:0x4a331f,roughness:.7}));
-  saddle.position.y=2.08; g.add(saddle);
+  const sph=(r,mat)=>new THREE.Mesh(new THREE.SphereGeometry(r,12,10),mat);
+  // cuerpo: barril + grupa + pecho (elipsoides solapados)
+  const barrel=sph(0.5,hide); barrel.scale.set(0.72,0.7,1.3); barrel.position.y=1.16; g.add(barrel);
+  const rump=sph(0.4,hide); rump.scale.set(0.8,0.82,0.9); rump.position.set(0,1.18,-0.55); g.add(rump);
+  const chest2=sph(0.42,hide); chest2.scale.set(0.78,0.85,0.85); chest2.position.set(0,1.22,0.55); g.add(chest2);
+  // cuello arqueado y cabeza alargada
+  const neck=cyl(0.12,0.2,0.8,hide,10); neck.rotation.x=0.75; neck.position.set(0,1.62,0.92); g.add(neck);
+  const head=sph(0.155,hide); head.scale.set(0.75,0.9,1.5); head.position.set(0,1.98,1.3); g.add(head);
+  const muzzle=cyl(0.075,0.1,0.28,dark,8); muzzle.rotation.x=1.25; muzzle.position.set(0,1.9,1.55); g.add(muzzle);
+  const earL=cone(0.045,0.13,hide,6); earL.position.set(-0.07,2.16,1.2);
+  const earR=earL.clone(); earR.position.x=0.07; g.add(earL,earR);
+  // crin (esferas oscuras a lo largo del cuello) y cola
+  for(let i=0;i<5;i++){ const m=sph(0.085,dark); m.scale.set(0.7,1,0.9);
+    m.position.set(0,1.78-i*0.11,1.06-i*0.13); g.add(m); }
+  const tail=cone(0.09,0.62,dark,8); tail.rotation.x=2.7; tail.position.set(0,1.28,-1.08); g.add(tail);
+  // manta y silla
+  const blanket=box(0.6,0.06,0.72,new THREE.MeshStandardMaterial({color:0x9b2c2c,roughness:.85}));
+  blanket.position.y=1.53; g.add(blanket);
+  const saddle=box(0.34,0.1,0.48,new THREE.MeshStandardMaterial({color:0x4a331f,roughness:.7}));
+  saddle.position.y=1.6; g.add(saddle);
+  // patas con muslo, caña y casco
   const legs=[];
-  [[-0.32,0.85],[0.32,0.85],[-0.32,-0.85],[0.32,-0.85]].forEach(p=>{
-    const hip=new THREE.Group(); hip.position.set(p[0],1.05,p[1]);
-    const l=box(0.2,1.05,0.24,hide); l.position.y=-0.5;
-    const hoof=box(0.22,0.14,0.26,dark); hoof.position.y=-1.06;
-    hip.add(l,hoof); g.add(hip); legs.push(hip);
+  [[-0.2,0.6],[0.2,0.6],[-0.2,-0.6],[0.2,-0.6]].forEach(p=>{
+    const hip=new THREE.Group(); hip.position.set(p[0],1.02,p[1]);
+    const up=cyl(0.062,0.08,0.46,hide,8); up.position.y=-0.22;
+    const lo=cyl(0.042,0.055,0.46,hide,8); lo.position.y=-0.66;
+    const hoof=cyl(0.055,0.06,0.09,dark,8); hoof.position.y=-0.93;
+    hip.add(up,lo,hoof); g.add(hip); legs.push(hip);
   });
   g.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
   return {group:g,legs,phase:0};
@@ -880,13 +955,14 @@ function spawnVillager(x,z){
   const clothes=[0x6b7a4a,0x7a6a4a,0x4a5a6a,0x8a7a5a];
   const v=humanoid({skin:skins[(Math.random()*3)|0],cloth:clothes[(Math.random()*4)|0],hair:0x3a2a1c});
   place(v.group,x,z,0);
+  v.group.scale.setScalar(rand(0.92,1.04));
   villagers.push({rig:v, home:{x,z}, target:new THREE.Vector3(x,0,z), t:rand(0,3), phase:Math.random()*9});
 }
 villageSpots.slice(0,7).forEach(s=>spawnVillager(s.x+rand(-3,3), s.z+rand(-3,3)));
 spawnVillager(-64,60); spawnVillager(-76,66);
 
 function spawnBandit(x,z){
-  const b=humanoid({skin:0xbf9a7a,cloth:0x2f2a26,cloth2:0x211d1a,hair:0x201510,sword:true});
+  const b=humanoid({skin:0xbf9a7a,cloth:0x2f2a26,cloth2:0x211d1a,hood:true,sword:true});
   place(b.group,x,z,0);
   bandits.push({rig:b, pos:new THREE.Vector3(x,getHeight(x,z),z), home:new THREE.Vector3(x,0,z),
     vel:new THREE.Vector3(), yaw:0, alive:true, hitFlash:0, phase:Math.random()*9, wanderT:rand(0,3),
@@ -976,7 +1052,7 @@ addEventListener('keydown',e=>{ keys[e.code]=true;
 addEventListener('keyup',e=>{ keys[e.code]=false; });
 
 // ratón: arrastrar para mirar, rueda para zoom
-let camDist=isMobile?9:8.5, camYaw=Math.PI, camPitch=0.32;
+let camDist=isMobile?10:9.5, camYaw=Math.PI, camPitch=0.32;
 let dragging=false, lastX=0,lastY=0;
 const cv=renderer.domElement;
 let downX=0,downY=0;
@@ -989,7 +1065,7 @@ addEventListener('mouseup',e=>{
 addEventListener('mousemove',e=>{ if(!dragging)return;
   camYaw-=(e.clientX-lastX)*0.005; camPitch=clamp(camPitch+(e.clientY-lastY)*0.004,-0.25,1.15);
   lastX=e.clientX; lastY=e.clientY; });
-cv.addEventListener('wheel',e=>{ camDist=clamp(camDist+e.deltaY*0.01,4,16); e.preventDefault(); },{passive:false});
+cv.addEventListener('wheel',e=>{ camDist=clamp(camDist+e.deltaY*0.01,5,18); e.preventDefault(); },{passive:false});
 
 // táctil: joystick izq, mirar der, botones
 let joyActive=false, joyId=-1, joyX=0,joyY=0, joyCX=0,joyCY=0;
@@ -1100,6 +1176,7 @@ const sfxStep=()=>blip(90,0.06,'sine',0.08);
 //  BUCLE PRINCIPAL
 // ============================================================================
 let running=false, paused=false;
+const cNightLight=new THREE.Color(0x8fa4d8), cDuskLight=new THREE.Color(0xff8a3d);
 let timeOfDay=0.30;         // 0..1 (empieza de mañana)
 const DAY_LEN=210;          // segundos por ciclo completo
 const clock=new THREE.Clock();
@@ -1119,16 +1196,22 @@ function updateSky(dt){
   const day=clamp((alt+0.12)/0.5,0,1);              // 0 noche, 1 día pleno
   const dusk=clamp(1-Math.abs(alt)/0.28,0,1)*(1-day*0.5); // rojizo cerca del horizonte
   // colores de cielo
-  const dayTop=new THREE.Color(0x2c6bb0), dayBot=new THREE.Color(0xbcd4ec);
-  const nightTop=new THREE.Color(0x0a1026), nightBot=new THREE.Color(0x1a2740);
-  const duskTop=new THREE.Color(0x35406e), duskBot=new THREE.Color(0xd98a4e);
+  const dayTop=new THREE.Color(0x2a62b8), dayBot=new THREE.Color(0xd6e6f4);
+  const nightTop=new THREE.Color(0x080d20), nightBot=new THREE.Color(0x18233c);
+  const duskTop=new THREE.Color(0x3a406e), duskBot=new THREE.Color(0xe8894a);
   const top=nightTop.clone().lerp(dayTop,day).lerp(duskTop,dusk*0.6);
   const bot=nightBot.clone().lerp(dayBot,day).lerp(duskBot,dusk);
   skyUniforms.top.value.copy(top); skyUniforms.bottom.value.copy(bot);
   scene.fog.color.copy(bot);
   // intensidades
-  sun.intensity=lerp(0.05,2.3,day); sun.color.setHSL(0.09,0.5,lerp(0.6,0.86,day)).lerp(new THREE.Color(0xff9a4a),dusk*0.6);
-  hemi.intensity=lerp(0.28,0.95,day); ambient.intensity=lerp(0.5,0.32,day);
+  sun.intensity=lerp(0.22,2.7,day);
+  sun.color.setHSL(0.085,0.55,lerp(0.75,0.9,day));
+  sun.color.lerp(cNightLight,clamp(1-day*1.5,0,1)).lerp(cDuskLight,dusk*0.7);
+  rim.intensity=lerp(0.2,0.65,day);
+  rim.position.copy(P.pos).addScaledVector(sunDir,-120); rim.position.y=P.pos.y+70;
+  rim.target.position.copy(P.pos);
+  winMat.emissiveIntensity=lerp(1.8,0.06,day);
+  hemi.intensity=lerp(0.28,0.6,day); ambient.intensity=lerp(0.4,0.26,day);
   hemi.color.copy(bot);
   sunDisc.visible=alt>-0.15; moonDisc.visible=alt<0.12;
   sunDisc.material.color.setHSL(0.11,0.7,0.8).lerp(new THREE.Color(0xff8040),dusk);
@@ -1137,7 +1220,7 @@ function updateSky(dt){
   sunGlow.position.copy(sunDisc.position);
   sunGlow.material.opacity=0.9*clamp(alt+0.2,0,1);
   cloudMat.opacity=lerp(0.12,0.72,day);
-  scene.fog.far=lerp(260,520,day);
+  scene.fog.far=lerp(300,680,day);
   clouds.forEach(c=>{ c.g.position.x+=c.v*dt; if(c.g.position.x>HALF*1.6) c.g.position.x=-HALF*1.6; });
   // reloj HUD
   let phase='Mediodía';
@@ -1218,7 +1301,7 @@ function updatePlayer(dt){
     const hsw=Math.sin(horse.phase)*0.65*P.moveAmt;
     horse.legs[0].rotation.x=hsw; horse.legs[3].rotation.x=hsw;
     horse.legs[1].rotation.x=-hsw; horse.legs[2].rotation.x=-hsw;
-    player.group.position.set(H.x,P.pos.y+1.28,H.z);
+    player.group.position.set(H.x,P.pos.y+0.62,H.z);
   } else {
     player.group.position.copy(P.pos);
   }
@@ -1227,7 +1310,7 @@ function updatePlayer(dt){
 function updateCamera(dt){
   const cp=Math.cos(camPitch), sp=Math.sin(camPitch);
   const dist=camDist+(H.mounted?2.4:0);
-  const head=_cp.copy(P.pos); head.y+=H.mounted?2.6:1.7;
+  const head=_cp.copy(P.pos); head.y+=H.mounted?2.2:1.7;
   const ox=Math.sin(camYaw)*cp, oz=Math.cos(camYaw)*cp;
   const desired=new THREE.Vector3(head.x - ox*dist, head.y + sp*dist + 0.4, head.z - oz*dist);
   // evitar que la cámara entre en el suelo

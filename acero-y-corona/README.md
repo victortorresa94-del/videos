@@ -28,7 +28,9 @@
 
 ---
 
-## 🏰 Qué incluye el prototipo (v0.2)
+## 🏰 Qué incluye el prototipo (v0.3)
+
+> **v0.3 — pase de dirección de arte** inspirado en los juegos de El Señor de los Anillos (ver [`docs/REFERENCIAS.md`](docs/REFERENCIAS.md)): personajes y caballo reconstruidos con volúmenes redondeados y proporciones reales, iluminación de 3 puntos con luz de borde, paleta saturada, ventanas que se encienden de noche, antorchas, flores, árboles de 9–14 m con color por instancia, castillo a escala (~14 m de muralla) y grade cinematográfico.
 
 - **Mundo abierto procedural** (~560×560 m): colinas onduladas, montañas que cierran el mapa, lagos y meseta central. Generado con ruido de valor + fBm; nada está "pintado a mano" salvo las estructuras.
 - **Caballo montable**: acércate y pulsa `E` (o 🐴 en móvil) para montar; galopa al doble de velocidad con animación de patas, pose de jinete y cámara elevada.

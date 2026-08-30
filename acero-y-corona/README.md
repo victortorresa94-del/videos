@@ -30,7 +30,9 @@
 
 ---
 
-## 🏰 Qué incluye el prototipo (v0.4)
+## 🏰 Qué incluye el prototipo (v0.5)
+
+> **v0.5 — Fase 1: animación esquelética real.** El jugador es ahora un caballero de malla skinned (KayKit, CC0) y los bandidos van encapuchados, con `AnimationMixer` y máquina de estados con fundidos (idle/andar/correr/2 ataques en combo/reacción/muerte animada), espada anclada al hueso de la mano y daño aplicado en la ventana activa del clip. Con retorno automático al sistema anterior si los modelos fallan. Auditado por QA: PASA.
 
 > **v0.4 — pase de *game feel* y bucle de juego**: bandidos con vida (3 golpes), retroceso, congelación de impacto, sacudida de cámara, números de daño y chispas; los bandidos sueltan oro y **reaparecen** en sus campamentos; **herrero en la aldea** (espada forjada que mata de un tajo, pociones); FOV dinámico al galopar, polvo, destello rojo al recibir daño; y **partida guardada** con botón «Continuar» en el menú.
 
@@ -73,4 +75,4 @@ acero-y-corona/
 
 ## ⚖️ Legal
 
-Obra original. No utiliza activos, código, marcas ni datos de terceros. Cualquier parecido con otros juegos de mundo abierto es únicamente de **género**. El nombre "Acero y Corona" es original para este proyecto.
+Obra original. Los únicos activos de terceros son piezas con licencia libre correctamente atribuidas en [`docs/CREDITOS.md`](docs/CREDITOS.md) (modelos de personaje CC0 de KayKit/Kay Lousberg, Three.js MIT, tipografías OFL). No usa marcas ni datos de terceros; cualquier parecido con otros juegos de mundo abierto es únicamente de **género**. El nombre "Acero y Corona" es original para este proyecto.

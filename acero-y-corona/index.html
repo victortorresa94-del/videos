@@ -304,7 +304,7 @@
     <p class="sub">Prototipo jugable v0.2 — WebGL, un solo archivo.</p>
     <p>Una <b>rebanada vertical</b> (vertical slice) de un mundo abierto medieval: terreno procedural con colinas, montañas y caminos de tierra, un castillo, una aldea, bosques, ciclo día/noche dinámico, caballero en tercera persona, un <b>caballo que montar</b>, combate cuerpo a cuerpo, monedas, aldeanos, bandidos y un hilo de misiones. Superficies con texturas procedurales, agua con oleaje y nubes a la deriva.</p>
     <p class="dim">Corre en el navegador (PC y móvil) con Three.js. Es la base honesta desde la que crecer hacia la visión completa — la hoja de ruta técnica está en el repositorio (<b>docs/ROADMAP.md</b>), incluyendo cómo se diseña de verdad el <i>backend</i> de un mundo abierto en línea, sin copiar nada de nadie.</p>
-    <p class="dim" style="margin-top:10px;">Obra original. No usa activos ni código de terceros; cualquier parecido con otros juegos es únicamente de género.</p>
+    <p class="dim" style="margin-top:10px;">Obra original. Modelos de personaje CC0 de KayKit (Kay Lousberg) y motor Three.js (MIT), atribuidos en los créditos del proyecto; cualquier parecido con otros juegos es únicamente de género.</p>
   </div>
 </div>
 
@@ -1854,7 +1854,8 @@ window.__ayc={P,H,bandits,toggleMount,openShop,nearMerchant,setTime:t=>{timeOfDa
   doAttack, resetCooldowns:()=>{ P.attackCd=0; P.hurtCd=0; bandits.forEach(b=>b.wanderT=0); },
   anim:{ skeletal:()=>skeletalOn, state:()=>P.anim?P.anim.current:'procedural',
     play:(name)=>{ if(P.anim && P.anim.actions[name]){ crossTo(P.anim,name,0.05); } },
-    banditState:(i)=>{ const b=bandits[i]; return b&&b.anim?b.anim.current:'procedural'; } }};
+    banditState:(i)=>{ const b=bandits[i]; return b&&b.anim?b.anim.current:'procedural'; } },
+  renderer, scene, camera};
 frame();
 
 })();

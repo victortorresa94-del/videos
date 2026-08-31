@@ -312,10 +312,10 @@
   <div class="card">
     <button class="close" data-close>×</button>
     <h2>Acerca de «Acero y Corona»</h2>
-    <p class="sub">Prototipo jugable v0.2 — WebGL, un solo archivo.</p>
+    <p class="sub">Prototipo jugable v0.7 — WebGL, un solo archivo.</p>
     <p>Una <b>rebanada vertical</b> (vertical slice) de un mundo abierto medieval: terreno procedural con colinas, montañas y caminos de tierra, un castillo, una aldea, bosques, ciclo día/noche dinámico, caballero en tercera persona, un <b>caballo que montar</b>, combate cuerpo a cuerpo, monedas, aldeanos, bandidos y un hilo de misiones. Superficies con texturas procedurales, agua con oleaje y nubes a la deriva.</p>
     <p class="dim">Corre en el navegador (PC y móvil) con Three.js. Es la base honesta desde la que crecer hacia la visión completa — la hoja de ruta técnica está en el repositorio (<b>docs/ROADMAP.md</b>), incluyendo cómo se diseña de verdad el <i>backend</i> de un mundo abierto en línea, sin copiar nada de nadie.</p>
-    <p class="dim" style="margin-top:10px;">Obra original. Modelos de personaje CC0 de KayKit (Kay Lousberg) y motor Three.js (MIT), atribuidos en los créditos del proyecto; cualquier parecido con otros juegos es únicamente de género.</p>
+    <p class="dim" style="margin-top:10px;">Obra original. Modelos de personaje CC0 de KayKit (Kay Lousberg), caballo CC0 de Quaternius y motor Three.js (MIT), atribuidos en los créditos del proyecto; cualquier parecido con otros juegos es únicamente de género.</p>
   </div>
 </div>
 
@@ -488,7 +488,7 @@ scene.add(rim); scene.add(rim.target);
 // ============================================================================
 // caminos de tierra (polilíneas): se pintan en el terreno y se mantienen despejados
 const pathA=[[0,46],[-16,50],[-36,54],[-56,58],[-70,64]];        // puerta → aldea
-const pathB=[[0,46],[24,20],[44,-8],[62,-26],[78,-36]];          // puerta → campamento
+const pathB=[[0,46],[24,20],[44,-8],[62,-26],[64,-40],[74,-48]]; // puerta → campamento (bordea el lago)
 function distToPath(x,z,pts){
   let dm=1e9;
   for(let i=0;i<pts.length-1;i++){
@@ -1177,15 +1177,29 @@ const anvil=box(0.7,0.5,0.35,M.steel);
 anvil.position.set(-67,getHeight(-67,60.5)+0.55,60.5); anvil.castShadow=true; scene.add(anvil);
 function nearMerchant(){ return !H.mounted && Math.hypot(-68-P.pos.x,61.5-P.pos.z)<3.2; }
 
+// un campamento nunca se asienta en agua: si el punto pisa un estanque se
+// desplaza en espiral al terreno seco más cercano (misma regla que la vegetación)
+function drySpot(x,z){
+  if(getHeight(x,z)>WATER+1.5) return {x,z};
+  for(let r=3;r<=45;r+=3){
+    for(let a=0;a<Math.PI*2;a+=Math.PI/8){
+      const nx=x+Math.cos(a)*r, nz=z+Math.sin(a)*r;
+      if(getHeight(nx,nz)>WATER+1.5) return {x:nx,z:nz};
+    }
+  }
+  return {x,z};
+}
 function spawnBandit(x,z){
+  const d=drySpot(x,z); x=d.x; z=d.z;
   const b=humanoid({skin:0xbf9a7a,cloth:0x2f2a26,cloth2:0x211d1a,hood:true,sword:true});
   place(b.group,x,z,0);
   bandits.push({rig:b, pos:new THREE.Vector3(x,getHeight(x,z),z), home:new THREE.Vector3(x,0,z),
     vel:new THREE.Vector3(), yaw:0, alive:true, hp:3, hitFlash:0, phase:Math.random()*9, wanderT:rand(0,3),
     target:new THREE.Vector3(x,0,z)});
 }
-// campamento de bandidos al noreste
-spawnBandit(78,-36); spawnBandit(84,-42); spawnBandit(72,-44);
+// campamento de bandidos al noreste (en la orilla sur del lago; la posición
+// antigua 78,-36 caía dentro del agua — hallazgo de QA v0.7)
+spawnBandit(74,-48); spawnBandit(80,-54); spawnBandit(68,-56);
 spawnBandit(-34,-78); spawnBandit(-26,-84);
 
 // ============================================================================
@@ -2194,7 +2208,7 @@ window.__ayc={P,H,bandits,toggleMount,openShop,nearMerchant,setTime:t=>{timeOfDa
     horseWalkNominal:HORSE_WALK_NOM, horseRunNominal:HORSE_RUN_NOM },
   // colisiones (Fase 2 de gamedev-mundo3d): lista en bruto para QA +
   // sonda puntual isBlockedAt(x,z[,radio]) sin mover al jugador.
-  colliders, testCollision:(x,z,r)=>isBlockedAt(x,z,r),
+  colliders, testCollision:(x,z,r)=>isBlockedAt(x,z,r), getHeight, drySpot,
   // cámara táctil (suavizado exponencial de camYaw/camPitch): lectura para
   // que QA verifique que el arrastre en iPhone gira de forma monótona y
   // sin saltos, sin poder escribir sobre el estado real de la cámara.

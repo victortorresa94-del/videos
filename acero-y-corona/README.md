@@ -30,7 +30,11 @@
 
 ---
 
-## 🏰 Qué incluye el prototipo (v0.5)
+## 🏰 Qué incluye el prototipo (v0.7)
+
+> **v0.7 — pase de «se juega de verdad» en móvil.** Controles táctiles rehechos para iPhone (suavizado y zona muerta del joystick, botones dentro del área segura, arrastre de cámara suave verificado frame a frame), **anti-patinaje** (la velocidad del clip de andar/correr se escala con la velocidad real del personaje), **443 colisionadores estáticos** (murallas, torres, casas — con la puerta del castillo como único paso, verificado muro a muro) y el campamento de bandidos reubicado a la orilla seca del lago (antes se generaba dentro del agua). Auditado por QA: PASA.
+
+> **v0.6 — caballo riggeado.** La montura es ahora una malla skinned real (Quaternius, CC0) con clips esqueléticos Idle/Walk/Run, pose de jinete a nivel de hueso y capa oculta al montar para evitar artefactos de la malla.
 
 > **v0.5 — Fase 1: animación esquelética real.** El jugador es ahora un caballero de malla skinned (KayKit, CC0) y los bandidos van encapuchados, con `AnimationMixer` y máquina de estados con fundidos (idle/andar/correr/2 ataques en combo/reacción/muerte animada), espada anclada al hueso de la mano y daño aplicado en la ventana activa del clip. Con retorno automático al sistema anterior si los modelos fallan. Auditado por QA: PASA.
 
@@ -59,20 +63,21 @@
 
 ```
 acero-y-corona/
-├── index.html        # el juego completo (HTML + CSS + JS + Three.js por CDN)
+├── index.html        # el juego completo (HTML + CSS + JS; modelos GLB embebidos en base64)
 ├── README.md         # este archivo
-└── docs/
-    ├── GDD.md        # documento de diseño (visión, pilares, sistemas, arte)
-    └── ROADMAP.md    # hoja de ruta técnica hacia la visión AAA + arquitectura de backend
+├── assets/           # modelos GLTF CC0 recortados (caballero, bandido, caballo)
+├── concept-art/      # biblia visual generada en Aura Studio
+└── docs/             # GDD, ROADMAP, PLAN-MAESTRO, DECISIONES, CREDITOS,
+                      # REFERENCIAS, ASSETS-FASE1, ANALISIS-ESDLA-PS4
 ```
 
 ## 🛠️ Tecnología
 
 - **Three.js (r128)** para el render WebGL. Sin build, sin dependencias que instalar.
-- Terreno, edificios y personajes construidos por código a partir de geometría primitiva (estética *low-poly* estilizada).
+- Terreno y edificios construidos por código a partir de geometría primitiva; personajes y caballo con **mallas skinned CC0** (KayKit, Quaternius) animadas con `AnimationMixer`, con retorno automático al rig procedural si los modelos no cargan.
 - Audio procedural con la Web Audio API (sin ficheros de sonido).
 - Un único archivo → se puede publicar como *artifact*, subir a cualquier hosting estático, o abrir en local.
 
 ## ⚖️ Legal
 
-Obra original. Los únicos activos de terceros son piezas con licencia libre correctamente atribuidas en [`docs/CREDITOS.md`](docs/CREDITOS.md) (modelos de personaje CC0 de KayKit/Kay Lousberg, Three.js MIT, tipografías OFL). No usa marcas ni datos de terceros; cualquier parecido con otros juegos de mundo abierto es únicamente de **género**. El nombre "Acero y Corona" es original para este proyecto.
+Obra original. Los únicos activos de terceros son piezas con licencia libre correctamente atribuidas en [`docs/CREDITOS.md`](docs/CREDITOS.md) (modelos de personaje CC0 de KayKit/Kay Lousberg, caballo CC0 de Quaternius, Three.js MIT, tipografías OFL). No usa marcas ni datos de terceros; cualquier parecido con otros juegos de mundo abierto es únicamente de **género**. El nombre "Acero y Corona" es original para este proyecto.

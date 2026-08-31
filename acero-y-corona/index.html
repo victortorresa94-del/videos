@@ -158,18 +158,28 @@
     background:radial-gradient(circle at 40% 35%,var(--gold-bright),var(--gold));
     border:1px solid #7c5f24;box-shadow:0 4px 12px rgba(0,0,0,.5);pointer-events:none;opacity:0;
     transition:opacity .15s;}
+  /* contraste subido (fondo más opaco + borde más grueso: se leían mal a
+     pleno sol en el iPhone) y mínimo táctil real de 56px por lado */
   .tbtn{position:absolute;pointer-events:auto;border-radius:50%;
-    border:2px solid rgba(201,162,75,.55);background:rgba(15,19,27,.6);color:var(--ink);
+    border:2.5px solid rgba(201,162,75,.8);background:rgba(11,15,22,.76);color:var(--ink);
     font-family:var(--font-display);font-weight:700;display:flex;align-items:center;justify-content:center;
-    letter-spacing:.02em;-webkit-user-select:none;user-select:none;}
-  .tbtn:active{background:rgba(201,162,75,.3);transform:scale(.94);}
-  #btnAttack{right:26px;bottom:118px;width:92px;height:92px;font-size:14px;
-    background:radial-gradient(circle at 42% 34%, rgba(195,65,65,.55), rgba(120,30,30,.6));
-    border-color:rgba(195,65,65,.7);}
-  #btnJump{right:130px;bottom:64px;width:70px;height:70px;font-size:13px;}
-  #btnSprint{right:40px;bottom:224px;width:62px;height:62px;font-size:11px;}
-  #btnMount{right:136px;bottom:152px;width:64px;height:64px;font-size:24px;display:none;
-    border-color:rgba(201,162,75,.85);}
+    letter-spacing:.02em;-webkit-user-select:none;user-select:none;
+    box-shadow:0 3px 10px rgba(0,0,0,.45);}
+  .tbtn:active{background:rgba(201,162,75,.38);transform:scale(.94);}
+  /* separados del borde con env(safe-area-inset-*): en iPhone (notch +
+     barra de gestos inferior) los valores fijos anteriores quedaban debajo
+     de zonas del sistema, medio tapados o disparaban gestos del SO */
+  #btnAttack{right:calc(24px + env(safe-area-inset-right));bottom:calc(134px + env(safe-area-inset-bottom));
+    width:96px;height:96px;font-size:14px;
+    background:radial-gradient(circle at 42% 34%, rgba(216,86,86,.72), rgba(120,30,30,.78));
+    border-color:rgba(216,86,86,.9);}
+  #btnJump{right:calc(140px + env(safe-area-inset-right));bottom:calc(74px + env(safe-area-inset-bottom));
+    width:74px;height:74px;font-size:13px;}
+  #btnSprint{right:calc(44px + env(safe-area-inset-right));bottom:calc(250px + env(safe-area-inset-bottom));
+    width:68px;height:68px;font-size:11px;}
+  #btnMount{right:calc(148px + env(safe-area-inset-right));bottom:calc(170px + env(safe-area-inset-bottom));
+    width:68px;height:68px;font-size:25px;display:none;
+    border-color:rgba(201,162,75,.95);}
   #btnMount.on{display:flex;}
 
   /* viñeta cinematográfica */
@@ -652,6 +662,72 @@ function makeCampfire(x,z){
 }
 
 // ============================================================================
+//  COLISIONES (primitivas + resolución por empuje del círculo del jugador)
+//  Plan de gamedev-mundo3d Fase 2: cilindros para torres/troncos/pozo, cajas
+//  orientadas (OBB) para muros/casas — todo en `colliders`, en coordenadas
+//  de MUNDO. Las secciones de más abajo (castillo, aldea, vegetación) van
+//  rellenando esta lista a medida que construyen su geometría.
+// ============================================================================
+const colliders=[];
+const obb=(x,z,hx,hz,rot)=>({type:'box',x,z,hx,hz,rot:rot||0,reach:Math.hypot(hx,hz)+1.2});
+const cylC=(x,z,r)=>({type:'cyl',x,z,r,reach:r+1.2});
+// círculo vs caja orientada: al espacio local de la caja (misma convención
+// de rotation.y que usa el resto del archivo: local+X -> mundo(cos,-sin)),
+// clamp al rectángulo, empuje a lo largo del vector más corto.
+function resolveCircleBox(px,pz,pr,b){
+  const dx=px-b.x, dz=pz-b.z;
+  if(dx*dx+dz*dz>b.reach*b.reach) return null;
+  const c=Math.cos(b.rot), s=Math.sin(b.rot);
+  const lx=dx*c-dz*s, lz=dx*s+dz*c;
+  const cx=clamp(lx,-b.hx,b.hx), cz=clamp(lz,-b.hz,b.hz);
+  const ddx=lx-cx, ddz=lz-cz, distSq=ddx*ddx+ddz*ddz;
+  let nx,nz,pen;
+  if(distSq>1e-8){
+    if(distSq>=pr*pr) return null;
+    const dist=Math.sqrt(distSq); nx=ddx/dist; nz=ddz/dist; pen=pr-dist;
+  } else {
+    // el centro del círculo ya está DENTRO de la caja: empuja por el eje
+    // de menor penetración (evita teletransportes al entrar de golpe).
+    const pxIn=b.hx-Math.abs(lx), pzIn=b.hz-Math.abs(lz);
+    if(pxIn<pzIn){ nx=lx>=0?1:-1; nz=0; pen=pxIn+pr; } else { nx=0; nz=lz>=0?1:-1; pen=pzIn+pr; }
+  }
+  const wnx=nx*c+nz*s, wnz=-nx*s+nz*c;
+  return {x:px+wnx*pen, z:pz+wnz*pen};
+}
+function resolveCircleCyl(px,pz,pr,ci){
+  const dx=px-ci.x, dz=pz-ci.z, distSq=dx*dx+dz*dz, minD=pr+ci.r;
+  if(distSq>=minD*minD) return null;
+  const dist=Math.sqrt(distSq);
+  if(dist<1e-6) return {x:ci.x+minD, z:ci.z};
+  const nx=dx/dist, nz=dz/dist, pen=minD-dist;
+  return {x:px+nx*pen, z:pz+nz*pen};
+}
+// empuja (px,pz) fuera de todos los colisionadores; 2 pasadas para
+// estabilizar esquinas donde dos colisionadores se solapan (torre+muro).
+function resolveCollisions(px,pz,pr){
+  let x=px,z=pz;
+  for(let pass=0;pass<2;pass++){
+    for(let i=0;i<colliders.length;i++){
+      const cd=colliders[i];
+      const res=cd.type==='cyl'?resolveCircleCyl(x,z,pr,cd):resolveCircleBox(x,z,pr,cd);
+      if(res){ x=res.x; z=res.z; }
+    }
+  }
+  return {x,z};
+}
+// para QA: ¿este punto (con radio pr, por defecto el del jugador a pie)
+// queda bloqueado por algún colisionador?
+function isBlockedAt(x,z,pr){
+  pr=pr===undefined?0.4:pr;
+  for(let i=0;i<colliders.length;i++){
+    const cd=colliders[i];
+    const res=cd.type==='cyl'?resolveCircleCyl(x,z,pr,cd):resolveCircleBox(x,z,pr,cd);
+    if(res) return true;
+  }
+  return false;
+}
+
+// ============================================================================
 //  CASTILLO
 // ============================================================================
 function battlements(len,mat){
@@ -669,33 +745,58 @@ function tower(r,h){
   const flag=box(1.3,0.8,0.04,M.banner); flag.position.set(0.66,h+r*2.0+0.6,0); g.add(flag);
   return g;
 }
+// colisionadores del castillo en coordenadas LOCALES (antes de aplicar la
+// posición/escala del grupo `castle`) — se transforman a coordenadas de
+// mundo justo después de fijar esa escala, más abajo.
+const castleColliders=[];
 function buildCastle(){
   const c=new THREE.Group();
-  const wallH=8, side=30;
-  // 4 muros
-  const mk=(w,x,z,rot)=>{ const wall=box(w,wallH,2.4,M.stoneL); wall.position.set(x,wallH/2,z); wall.rotation.y=rot;
-    const b=battlements(w,M.stoneD); b.position.set(x,wallH+0.5,z); b.rotation.y=rot;
-    c.add(wall); // merlones
-    const n=Math.floor(w/2.4); for(let i=0;i<=n;i++){const m=box(1,1.3,2.4,M.stoneD);
-      const off=-w/2+i*(w/n); m.position.set(x+Math.cos(rot)*off, wallH+0.6, z-Math.sin(rot)*off); m.rotation.y=rot; c.add(m);} };
-  mk(side*2,0,-side, 0);
-  mk(side*2,0, side, 0);
-  mk(side*2,-side,0, Math.PI/2);
-  mk(side*2, side,0, Math.PI/2);
+  const wallH=8, side=30, gateGap=8; // hueco de la puerta sur (local, sin escalar)
+  // 4 muros — `skip` corta el tramo [skip0,skip1] del muro (solo la
+  // muralla sur lo usa: es la única con puerta). Cada tramo construido
+  // registra su propia caja orientada en `castleColliders`.
+  const mk=(w,x,z,rot,skip)=>{
+    const segs=[];
+    if(skip){ if(skip[0]>-w/2) segs.push([-w/2,skip[0]]); if(skip[1]<w/2) segs.push([skip[1],w/2]); }
+    else segs.push([-w/2,w/2]);
+    segs.forEach(([a,b])=>{
+      const segW=b-a; if(segW<0.3) return;
+      const off0=(a+b)/2;
+      const wall=box(segW,wallH,2.4,M.stoneL);
+      wall.position.set(x+Math.cos(rot)*off0, wallH/2, z-Math.sin(rot)*off0); wall.rotation.y=rot; c.add(wall);
+      const bt=battlements(segW,M.stoneD);
+      bt.position.set(x+Math.cos(rot)*off0, wallH+0.5, z-Math.sin(rot)*off0); bt.rotation.y=rot; c.add(bt);
+      const n=Math.max(1,Math.floor(segW/2.4));
+      for(let i=0;i<=n;i++){ const m=box(1,1.3,2.4,M.stoneD);
+        const off=a+i*(segW/n); m.position.set(x+Math.cos(rot)*off, wallH+0.6, z-Math.sin(rot)*off); m.rotation.y=rot; c.add(m); }
+      castleColliders.push({type:'box', x:x+Math.cos(rot)*off0, z:z-Math.sin(rot)*off0, hx:segW/2, hz:1.2, rot});
+    });
+  };
+  mk(side*2,0,-side, 0);                        // muralla norte, entera
+  mk(side*2,0, side, 0, [-gateGap/2,gateGap/2]); // muralla sur, CON HUECO de la puerta
+  mk(side*2,-side,0, Math.PI/2);                 // muralla oeste, entera
+  mk(side*2, side,0, Math.PI/2);                 // muralla este, entera
   // torres en esquinas
-  [[-side,-side],[side,-side],[-side,side],[side,side]].forEach(p=>{ const t=tower(4.2,13); t.position.set(p[0],0,p[1]); c.add(t); });
-  // torre del homenaje (keep)
+  [[-side,-side],[side,-side],[-side,side],[side,side]].forEach(p=>{ const t=tower(4.2,13); t.position.set(p[0],0,p[1]); c.add(t);
+    castleColliders.push({type:'cyl', x:p[0], z:p[1], r:4.2}); });
+  // torre del homenaje (keep) — colisión aproximada por un cilindro
+  // (radio 9, entre el círculo inscrito de la base 16×16 y su diagonal).
   const keep=new THREE.Group();
   const kb=box(16,20,16,M.stoneL); kb.position.y=10; keep.add(kb);
   for(let s=0;s<4;s++){ const a=s*Math.PI/2; for(let i=0;i<=8;i++){ const m=box(1.4,1.6,1.4,M.stoneD);
     const off=-8+i*2; m.position.set(Math.cos(a)*8+ -Math.sin(a)*off, 20.6, Math.sin(a)*8+Math.cos(a)*off); keep.add(m);} }
   const kroof=cone(7,10,M.roofRed,4); kroof.position.y=26; kroof.rotation.y=Math.PI/4; keep.add(kroof);
   keep.position.set(0,0,0); c.add(keep);
-  // caseta de la puerta (gatehouse) al sur
+  castleColliders.push({type:'cyl', x:0, z:0, r:9});
+  // caseta de la puerta (gatehouse) al sur — sus dos torreones son el
+  // verdadero cuello de botella navegable de la entrada (el hueco del
+  // muro en sí es más ancho, para que la caseta se vea encajada en él).
   const gate=new THREE.Group();
   const g1=box(5,10,5,M.stoneL); g1.position.set(-4,5,0); const g2=g1.clone(); g2.position.set(4,5,0);
   const lintel=box(13,2.5,5,M.stoneL); lintel.position.set(0,9,0);
   gate.add(g1,g2,lintel); gate.position.set(0, 0, side); c.add(gate);
+  castleColliders.push({type:'box', x:-4, z:side, hx:2.5, hz:2.5, rot:0});
+  castleColliders.push({type:'box', x:4, z:side, hx:2.5, hz:2.5, rot:0});
   // puerta de madera
   const door=box(6,7,0.4,M.woodD); door.position.set(0,3.5, side-2.3); c.add(door);
   // estandartes en la fachada
@@ -709,6 +810,16 @@ castle.position.set(0, getHeight(0,0), 0);
 castle.scale.set(1.25,1.32,1.25);
 castle.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
 scene.add(castle);
+// los colisionadores del castillo son locales (X/Z uniformes a 1.25):
+// se transforman a mundo una sola vez, aquí, con la misma escala/posición
+// que se le acaba de aplicar al grupo `castle`.
+(function(){
+  const sx=castle.scale.x, sz=castle.scale.z, ox=castle.position.x, oz=castle.position.z;
+  castleColliders.forEach(cd=>{
+    if(cd.type==='cyl') colliders.push(cylC(ox+cd.x*sx, oz+cd.z*sz, cd.r*sx));
+    else colliders.push(obb(ox+cd.x*sx, oz+cd.z*sz, cd.hx*sx, cd.hz*sz, cd.rot));
+  });
+})();
 const GATE={x:0, z:44}; // punto de la puerta (frente al castillo escalado)
 
 // ============================================================================
@@ -747,6 +858,7 @@ const villageSpots=[];
     h.rotation.y=rand(0,TAU);
     place(h,x,z,0);
     villageSpots.push({x,z});
+    colliders.push(obb(x,z,w/2,d/2,h.rotation.y)); // caja orientada (rotación libre)
   }
   // pozo central
   const well=new THREE.Group();
@@ -754,6 +866,7 @@ const villageSpots=[];
   const p1=cyl(0.1,0.1,3,M.wood); p1.position.set(-1.2,1.8,0); const p2=p1.clone(); p2.position.set(1.2,1.8,0);
   const roofw=cone(2,1.2,M.roofRed,4); roofw.rotation.y=Math.PI/4; roofw.position.y=3.6;
   well.add(p1,p2,roofw); place(well,cx,cz,0);
+  colliders.push(cylC(cx,cz,1.6));
   // hoguera de plaza
   makeCampfire(cx+6, cz-6);
 })();
@@ -806,6 +919,14 @@ const oakPts=scatterPositions(Math.floor(treeCount*0.5),(x,z)=>vnoise(x*0.05+9,z
 const oakCols=colorize(oakPts,oakHue);
 instancedFrom(trunkGeo,M.woodD,oakPts);
 instancedFrom(oakGeo,leafMatI,oakPts,null,(i)=>oakCols[i]);
+// troncos como cilindros de colisión — solo los suficientemente gruesos
+// (radio de la base del tronco, 0.3 escalado por instancia, > 0.25 m):
+// el early-out por `reach` en resolveCircle* hace que el coste por árbol
+// lejano sea una sola resta al cuadrado, así que cientos de troncos no
+// pesan en el presupuesto de fotograma.
+(function addTrunkColliders(pts){
+  pts.forEach(p=>{ const r=0.3*p.s; if(r>0.25) colliders.push(cylC(p.x,p.z,r)); });
+})(pinePts.concat(oakPts));
 // rocas, arbustos y flores de pradera
 const rockGeo=new THREE.DodecahedronGeometry(1,0);
 instancedFrom(rockGeo,M.rock,scatterPositions(isMobile?60:110,null,0.6,2.2),(s)=>s*0.35);
@@ -1076,6 +1197,14 @@ spawnBandit(-34,-78); spawnBandit(-26,-84);
 //  sigue 100% funcional con los personajes procedurales: fallback obligatorio.
 // ============================================================================
 const CROSSFADE=0.18, CROSSFADE_ATK=0.12, ATTACK_DUR=0.42, HIT_ANIM_DUR=0.25, DEATH_FALL_DUR=0.625;
+// velocidad "nominal" de cada clip de locomoción: la velocidad real a la
+// que el timeScale queda en 1 (paso natural, sin patinaje). Por debajo,
+// las piernas van más lentas que el desplazamiento se veía "patinando"
+// sobre el suelo; encima, iban más lentas que los pies — ambos casos
+// rotos. clamp 0.6–1.6 evita que un pico de velocidad (o el joystick a
+// fondo) dispare una animación ridículamente rápida o congelada.
+const WALK_NOM_SPEED=3, RUN_NOM_SPEED=8, HORSE_WALK_NOM=4, HORSE_RUN_NOM=11;
+const locoTimeScale=(speed,nominal)=>clamp(speed/nominal,0.6,1.6);
 // altura del asiento sobre el suelo bajo el caballo (pelvis del jinete),
 // calibrada mirando capturas con el caballo riggeado de 1,6 m a la cruz.
 const MOUNT_SEAT_Y=0.98;
@@ -1202,6 +1331,10 @@ function applySkeletalToPlayer(){
   const mixer=new THREE.AnimationMixer(rig.clone);
   const actions=buildActions(mixer,GLTF_KNIGHT.animations);
   actions.Idle.play();
+  // snap inicial a la posición real del jugador — si no, el lerp de
+  // sincronía (pensado para absorber empujes de colisión) lo haría
+  // "deslizar" en pantalla desde el origen del mundo (0,0,0) al arrancar.
+  rig.clone.position.copy(P.pos);
   P.anim={mixer,actions,clone:rig.clone,current:'Idle',legBones:{
     ulL:rig.clone.getObjectByName('upperlegl'), ulR:rig.clone.getObjectByName('upperlegr'),
     llL:rig.clone.getObjectByName('lowerlegl'), llR:rig.clone.getObjectByName('lowerlegr')
@@ -1255,14 +1388,32 @@ function updatePlayerSkeletal(dt){
     const fade=(target===P.attackClip||A.current===P.attackClip||target==='Hit_A')?CROSSFADE_ATK:CROSSFADE;
     crossTo(A,target,fade);
   }
+  // patinaje de pies: el timeScale de Walking_A/Running_A se recalcula
+  // TODOS los frames (no solo al cambiar de estado) para seguir la
+  // velocidad real del jugador — con el joystick analógico la velocidad
+  // varía de forma continua, no solo en los saltos discretos del teclado.
+  if(target==='Walking_A' && A.actions.Walking_A) A.actions.Walking_A.timeScale=locoTimeScale(P.speed,WALK_NOM_SPEED);
+  else if(target==='Running_A' && A.actions.Running_A) A.actions.Running_A.timeScale=locoTimeScale(P.speed,RUN_NOM_SPEED);
   A.mixer.update(dt);
   // montado: el jinete no "camina" sentado — se congela el Idle en su pose
   // de reposo (t≈0) en vez de dejarlo correr entero (aunque sea a cámara
   // lenta): es la pose ya validada en pie, la misma en la que la espada
   // cuelga recta desde `handslotr`.
   if(H.mounted && A.actions.Idle) A.actions.Idle.time=0;
-  A.clone.position.copy(P.pos);
+  // posición del clon: interpolada (no copiada en seco) para absorber el
+  // "pop" de un empuje de colisión brusco en un solo frame — a tasa alta
+  // (24/s) no se nota retraso en el movimiento normal.
+  const posRate=Math.min(1,dt*24);
+  A.clone.position.x=lerp(A.clone.position.x,P.pos.x,posRate);
+  A.clone.position.z=lerp(A.clone.position.z,P.pos.z,posRate);
+  // montado, el jinete esquelético se sienta a la altura del lomo del
+  // caballo (MOUNT_SEAT_Y) igual que el rig procedural — antes usaba
+  // P.pos.y (altura de SUELO) y el caballero quedaba hundido a ras de
+  // tierra bajo el caballo en vez de sentado en la silla (bug real de la
+  // v0.6: parte de por qué "las animaciones se ven raras" a caballo).
+  A.clone.position.y=H.mounted?getHeight(P.pos.x,P.pos.z)+MOUNT_SEAT_Y:P.pos.y;
   A.clone.rotation.y=player.group.rotation.y;
+  A.clone.rotation.z=player.group.rotation.z||0;
   if(H.mounted){
     applyRidingPose(A);
   }
@@ -1277,6 +1428,10 @@ function updateHorseSkeletal(dt){
   const A=H.anim; if(!A) return;
   const target=horseState();
   if(target!==A.current) crossTo(A,target,CROSSFADE);
+  // mismo ajuste de patinaje que el jugador, aplicado al galope/trote del
+  // caballo — recalculado cada frame, no solo al cambiar de estado.
+  if(target==='Armature|Walk' && A.actions['Armature|Walk']) A.actions['Armature|Walk'].timeScale=locoTimeScale(P.speed,HORSE_WALK_NOM);
+  else if(target==='Armature|Run' && A.actions['Armature|Run']) A.actions['Armature|Run'].timeScale=locoTimeScale(P.speed,HORSE_RUN_NOM);
   A.mixer.update(dt);
   const gy=getHeight(H.x,H.z);
   A.clone.position.set(H.x,gy,H.z);
@@ -1403,20 +1558,36 @@ cv.addEventListener('wheel',e=>{ camDist=clamp(camDist+e.deltaY*0.01,5,18); e.pr
 // táctil: joystick izq, mirar der, botones
 let joyActive=false, joyId=-1, joyX=0,joyY=0, joyCX=0,joyCY=0;
 let lookId=-1, lookLX=0,lookLY=0;
+// cámara táctil: sensibilidad reducida (el crudo a 0.006 rad/px se sentía
+// "nervioso" en iPhone: cualquier micro-temblor del pulgar se notaba
+// directo en la vista) + suavizado exponencial — camYaw/camPitch persiguen
+// el objetivo cada frame en updateCamera() en vez de saltar a él.
+const TOUCH_LOOK_SENS_YAW=0.0042, TOUCH_LOOK_SENS_PITCH=0.0035, TOUCH_LOOK_SMOOTH=12;
+let camYawTarget=camYaw, camPitchTarget=camPitch;
 const joyBase=el('joyBase'),joyStick=el('joyStick');
 function joyStart(id,x,y){ joyActive=true; joyId=id; joyCX=x; joyCY=y;
   joyBase.style.left=(x-66)+'px'; joyBase.style.top=(y-66)+'px'; joyBase.style.opacity=1;
   joyStick.style.left=(x-29)+'px'; joyStick.style.top=(y-29)+'px'; joyStick.style.opacity=1; }
+// zona muerta (~12% del recorrido: absorbe el temblor del pulgar en
+// reposo) + curva de respuesta (smoothstep: fina cerca del centro, sin
+// escalón brusco al cruzar la zona muerta ni al llegar al borde).
+const JOY_DEADZONE=0.12;
 function joyMove(x,y){ let dx=x-joyCX, dy=y-joyCY; const r=Math.hypot(dx,dy), max=58;
   if(r>max){ dx=dx/r*max; dy=dy/r*max; }
-  joyX=dx/max; joyY=dy/max;
-  joyStick.style.left=(joyCX+dx-29)+'px'; joyStick.style.top=(joyCY+dy-29)+'px'; }
+  joyStick.style.left=(joyCX+dx-29)+'px'; joyStick.style.top=(joyCY+dy-29)+'px';
+  const mag=Math.min(1,r/max);
+  if(mag<JOY_DEADZONE || r<1e-4){ joyX=0; joyY=0; return; }
+  const eased=(mag-JOY_DEADZONE)/(1-JOY_DEADZONE);
+  const curved=eased*eased*(3-2*eased); // smoothstep
+  joyX=(dx/r)*curved; joyY=(dy/r)*curved; }
 function joyEnd(){ joyActive=false; joyId=-1; joyX=0; joyY=0; joyBase.style.opacity=0; joyStick.style.opacity=0; }
 
 if(isTouch){
   addEventListener('touchstart',e=>{ if(!running)return;
     for(const t of e.changedTouches){
       if(t.target.classList && t.target.classList.contains('tbtn')) continue;
+      // el joystick REAPARECE donde se posa el pulgar (joyStart ya lo centra
+      // en el punto de contacto: sin salto al soltar y volver a tocar)
       if(t.clientX<window.innerWidth*0.5 && !joyActive){ joyStart(t.identifier,t.clientX,t.clientY); }
       else if(lookId<0){ lookId=t.identifier; lookLX=t.clientX; lookLY=t.clientY; }
     }
@@ -1424,16 +1595,24 @@ if(isTouch){
   addEventListener('touchmove',e=>{ if(!running)return;
     for(const t of e.changedTouches){
       if(t.identifier===joyId) joyMove(t.clientX,t.clientY);
-      else if(t.identifier===lookId){ camYaw-=(t.clientX-lookLX)*0.006; camPitch=clamp(camPitch+(t.clientY-lookLY)*0.005,-0.25,1.15); lookLX=t.clientX; lookLY=t.clientY; }
+      else if(t.identifier===lookId){
+        camYawTarget-=(t.clientX-lookLX)*TOUCH_LOOK_SENS_YAW;
+        camPitchTarget=clamp(camPitchTarget+(t.clientY-lookLY)*TOUCH_LOOK_SENS_PITCH,-0.25,1.15);
+        lookLX=t.clientX; lookLY=t.clientY;
+      }
     }
     if(joyActive) e.preventDefault();
   },{passive:false});
   const endT=e=>{ for(const t of e.changedTouches){ if(t.identifier===joyId) joyEnd(); if(t.identifier===lookId) lookId=-1; } };
   addEventListener('touchend',endT); addEventListener('touchcancel',endT);
 
+  // los botones cortan la propagación en start/move/end: con multitouch real
+  // (un dedo en un botón + otro arrastrando cámara a la vez) el toque del
+  // botón nunca debe alimentar el joystick/mirar del listener global.
   const bind=(id,fn,fnUp)=>{ const b=el(id);
     b.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();fn();},{passive:false});
-    if(fnUp) b.addEventListener('touchend',e=>{e.preventDefault();fnUp();},{passive:false}); };
+    b.addEventListener('touchmove',e=>{e.stopPropagation();},{passive:false});
+    b.addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation(); if(fnUp) fnUp();},{passive:false}); };
   bind('btnAttack',()=>{if(running)doAttack();});
   bind('btnMount',()=>{ if(!running)return; if(nearMerchant()) openShop(); else toggleMount(); });
   bind('btnJump',()=>{ jumpPressed=true; });
@@ -1610,11 +1789,27 @@ function updatePlayer(dt){
   const vx=wx*spd*mag, vz=wz*spd*mag;
   P.pos.x=clamp(P.pos.x+vx*dt,-HALF+14,HALF-14);
   P.pos.z=clamp(P.pos.z+vz*dt,-HALF+14,HALF-14);
+  // el mundo deja de ser falso aquí: empuja el círculo del jugador (o del
+  // caballo, más ancho, si va montado) fuera de muros/torres/troncos en
+  // XZ ANTES del clamp de altura de más abajo — así nunca se atraviesa
+  // nada sólido, pero la gravedad/salto siguen intactos.
+  { const pr=H.mounted?0.7:0.4; const pu=resolveCollisions(P.pos.x,P.pos.z,pr); P.pos.x=pu.x; P.pos.z=pu.z; }
   P.speed=Math.hypot(vx,vz);
   if(moving){ P.yaw=Math.atan2(wx,wz); }
-  // orientar suavemente el modelo
+  // orientar suavemente el modelo — dt*8 (antes dt*12): el snap a dt*12 se
+  // sentía robótico al cambiar de dirección de golpe. Además, una capa
+  // procedural de inclinación (±0.06 rad) sobre el eje Z del root,
+  // proporcional a la velocidad angular real de ESTE frame (no al ángulo
+  // total pendiente), para que un giro brusco incline al caballero un
+  // instante en vez de solo rotarlo en seco.
   let cy=player.group.rotation.y, ty=P.yaw;
-  let diff=((ty-cy+Math.PI)%TAU)-Math.PI; player.group.rotation.y=cy+diff*Math.min(1,dt*12);
+  let diff=((ty-cy+Math.PI)%TAU)-Math.PI;
+  const turnStep=diff*Math.min(1,dt*8);
+  player.group.rotation.y=cy+turnStep;
+  const angVel=dt>0.0001?turnStep/dt:0;
+  const wantTilt=clamp(-angVel*0.028,-0.06,0.06);
+  P.tiltZ=lerp(P.tiltZ||0,wantTilt,Math.min(1,dt*10));
+  player.group.rotation.z=P.tiltZ;
   // gravedad / salto
   const wantJump=keys['Space']||jumpPressed; jumpPressed=false;
   const groundY=getHeight(P.pos.x,P.pos.z);
@@ -1671,6 +1866,15 @@ function updatePlayer(dt){
 }
 
 function updateCamera(dt){
+  // suavizado exponencial SOLO en táctil: en PC el ratón ya escribe
+  // directamente en camYaw/camPitch (se siente instantáneo y correcto,
+  // no se toca). En iPhone, camYaw/camPitch persiguen el objetivo que
+  // deja el dedo en touchmove, ~12/s: evita el salto al reposicionar.
+  if(isTouch){
+    const smooth=1-Math.exp(-TOUCH_LOOK_SMOOTH*dt);
+    camYaw+=(camYawTarget-camYaw)*smooth;
+    camPitch+=(camPitchTarget-camPitch)*smooth;
+  }
   const cp=Math.cos(camPitch), sp=Math.sin(camPitch);
   const dist=camDist+(H.mounted?2.4:0);
   const head=_cp.copy(P.pos); head.y+=H.mounted?2.2:1.7;
@@ -1750,7 +1954,11 @@ function updateBandits(dt){
     }
     const dx=tx-b.pos.x, dz=tz-b.pos.z, d=Math.hypot(dx,dz);
     if(d>1.6){ const nx=dx/d, nz=dz/d;
-      b.pos.x+=nx*sp*dt; b.pos.z+=nz*sp*dt; b.pos.y=getHeight(b.pos.x,b.pos.z);
+      b.pos.x+=nx*sp*dt; b.pos.z+=nz*sp*dt;
+      // los bandidos también colisionan: que no atraviesen el castillo
+      // persiguiendo al jugador (se quedarán frenados contra el muro).
+      { const pb=resolveCollisions(b.pos.x,b.pos.z,0.4); b.pos.x=pb.x; b.pos.z=pb.z; }
+      b.pos.y=getHeight(b.pos.x,b.pos.z);
       const ty=Math.atan2(nx,nz); let diff=((ty-b.yaw+Math.PI)%TAU)-Math.PI; b.yaw+=diff*Math.min(1,dt*8);
       b.phase+=dt*7; const sw=Math.sin(b.phase)*0.5; b.rig.legL.rotation.x=sw; b.rig.legR.rotation.x=-sw;
       b.rig.armL.rotation.x=-sw*0.6; b.rig.armR.rotation.x=sw*0.6;
@@ -1958,11 +2166,39 @@ el('boot').style.display='none';
 // gancho mínimo para pruebas automatizadas
 window.__ayc={P,H,bandits,toggleMount,openShop,nearMerchant,setTime:t=>{timeOfDay=t;},kills:()=>banditsDefeated,
   doAttack, resetCooldowns:()=>{ P.attackCd=0; P.hurtCd=0; bandits.forEach(b=>b.wanderT=0); },
+  // gancho de QA: simula N segundos de juego llamando a updatePlayer() en
+  // trozos de dt=0.05 (el mismo clamp que usa el bucle real), pero SIN
+  // pasar por requestAnimationFrame — así el test de colisión ("avanzar
+  // 2s contra un muro") no depende del framerate real de SwiftShader
+  // (~1-5 fps en este sandbox), que lo haría flaky o carísimo en tiempo
+  // real. Usa el código de producción tal cual (updatePlayer real).
+  simulateSeconds:(seconds,heldKey)=>{
+    const prevKey = heldKey?keys[heldKey]:undefined;
+    if(heldKey) keys[heldKey]=true;
+    let t=seconds;
+    while(t>0.0001){ const dt=Math.min(t,0.05); updatePlayer(dt); t-=dt; }
+    if(heldKey) keys[heldKey]=prevKey;
+    return {x:P.pos.x,y:P.pos.y,z:P.pos.z};
+  },
   anim:{ skeletal:()=>skeletalOn, state:()=>P.anim?P.anim.current:'procedural',
     play:(name)=>{ if(P.anim && P.anim.actions[name]){ crossTo(P.anim,name,0.05); } },
     banditState:(i)=>{ const b=bandits[i]; return b&&b.anim?b.anim.current:'procedural'; },
     horseSkeletal:()=>horseSkeletalOn,
-    horseState:()=>H.anim?H.anim.current:'procedural' },
+    horseState:()=>H.anim?H.anim.current:'procedural',
+    // gancho de QA: fija P.speed y re-ejecuta SOLO el paso de animación del
+    // jugador (dt=0, no avanza el clip) para leer el timeScale resultante
+    // sin depender del framerate real de SwiftShader ni de simular input.
+    tickPlayerAt:(speed)=>{ P.speed=speed; updatePlayerSkeletal(0);
+      return P.anim?{state:P.anim.current, timeScale:P.anim.actions[P.anim.current]?P.anim.actions[P.anim.current].timeScale:null}:null; },
+    walkNominal:WALK_NOM_SPEED, runNominal:RUN_NOM_SPEED,
+    horseWalkNominal:HORSE_WALK_NOM, horseRunNominal:HORSE_RUN_NOM },
+  // colisiones (Fase 2 de gamedev-mundo3d): lista en bruto para QA +
+  // sonda puntual isBlockedAt(x,z[,radio]) sin mover al jugador.
+  colliders, testCollision:(x,z,r)=>isBlockedAt(x,z,r),
+  // cámara táctil (suavizado exponencial de camYaw/camPitch): lectura para
+  // que QA verifique que el arrastre en iPhone gira de forma monótona y
+  // sin saltos, sin poder escribir sobre el estado real de la cámara.
+  camera_look:{yaw:()=>camYaw, pitch:()=>camPitch, yawTarget:()=>camYawTarget, pitchTarget:()=>camPitchTarget},
   renderer, scene, camera};
 frame();
 

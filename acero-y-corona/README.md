@@ -30,7 +30,9 @@
 
 ---
 
-## 🏰 Qué incluye el prototipo (v0.7)
+## 🏰 Qué incluye el prototipo (v0.8)
+
+> **v0.8 — el escenario despierta (dirección: realismo estilizado tipo Fortnite).** **Hierba 3D** por miles de matas instanciadas con textura de briznas, **robles con copa multi-lóbulo** y pinos de tres pisos, **farallones de roca** en laderas empinadas, **juncos y espadañas** en las orillas, roca que asoma en las pendientes del terreno y calvas de hierba seca, textura de suelo al doble de resolución con briznas pintadas, y agua más profunda. Todo pagado con la **fusión de geometría estática** (cada almena y viga del castillo/aldea era un draw call): la vista del castillo baja de 219–392 a **~120 draw calls** y la aldea de 339 a **~108**, con TODO el detalle nuevo incluido.
 
 > **v0.7 — pase de «se juega de verdad» en móvil.** Controles táctiles rehechos para iPhone (suavizado y zona muerta del joystick, botones dentro del área segura, arrastre de cámara suave verificado frame a frame), **anti-patinaje** (la velocidad del clip de andar/correr se escala con la velocidad real del personaje), **443 colisionadores estáticos** (murallas, torres, casas — con la puerta del castillo como único paso, verificado muro a muro) y el campamento de bandidos reubicado a la orilla seca del lago (antes se generaba dentro del agua). Auditado por QA: PASA.
 

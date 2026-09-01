@@ -286,6 +286,7 @@
     <button class="btn ghost" id="aboutBtn">Acerca de</button>
   </div>
   <div class="foot"><b>PC:</b> WASD moverse · ratón (arrastrar) mirar · Espacio saltar · Shift correr · Clic/J atacar · E montar a caballo &nbsp;·&nbsp; <b>Móvil:</b> joystick + botones</div>
+  <div style="position:absolute;bottom:10px;right:14px;color:#a99e86;font-size:12px;letter-spacing:1.5px;">v0.8</div>
 </div>
 
 <!-- Panel controles -->
@@ -312,7 +313,7 @@
   <div class="card">
     <button class="close" data-close>×</button>
     <h2>Acerca de «Acero y Corona»</h2>
-    <p class="sub">Prototipo jugable v0.7 — WebGL, un solo archivo.</p>
+    <p class="sub">Prototipo jugable v0.8 — WebGL, un solo archivo.</p>
     <p>Una <b>rebanada vertical</b> (vertical slice) de un mundo abierto medieval: terreno procedural con colinas, montañas y caminos de tierra, un castillo, una aldea, bosques, ciclo día/noche dinámico, caballero en tercera persona, un <b>caballo que montar</b>, combate cuerpo a cuerpo, monedas, aldeanos, bandidos y un hilo de misiones. Superficies con texturas procedurales, agua con oleaje y nubes a la deriva.</p>
     <p class="dim">Corre en el navegador (PC y móvil) con Three.js. Es la base honesta desde la que crecer hacia la visión completa — la hoja de ruta técnica está en el repositorio (<b>docs/ROADMAP.md</b>), incluyendo cómo se diseña de verdad el <i>backend</i> de un mundo abierto en línea, sin copiar nada de nadie.</p>
     <p class="dim" style="margin-top:10px;">Obra original. Modelos de personaje CC0 de KayKit (Kay Lousberg), caballo CC0 de Quaternius y motor Three.js (MIT), atribuidos en los créditos del proyecto; cualquier parecido con otros juegos es únicamente de género.</p>
@@ -508,16 +509,22 @@ terrGeo.rotateX(-Math.PI/2);
   const cGrass=new THREE.Color(0x4e7a33), cGrass2=new THREE.Color(0x74a04b),
         cRock=new THREE.Color(0x74685c), cSand=new THREE.Color(0xc2ab7a),
         cSnow=new THREE.Color(0xdfe6ea), cDark=new THREE.Color(0x415a35),
-        cPath=new THREE.Color(0x8b7355);
+        cPath=new THREE.Color(0x8b7355), cDry=new THREE.Color(0x9aa054);
   for(let i=0;i<pos.count;i++){
     const x=pos.getX(i), z=pos.getZ(i); const y=getHeight(x,z);
     pos.setY(i,y);
+    // pendiente local: cuánta roca asoma bajo la hierba
+    const sl=Math.abs(getHeight(x+1.6,z)-getHeight(x-1.6,z))+Math.abs(getHeight(x,z+1.6)-getHeight(x,z-1.6));
     // color por altura/pendiente
     const c=new THREE.Color();
     if(y<WATER+1.4) c.copy(cSand);
     else if(y>52) c.copy(cSnow);
     else if(y>26) c.copy(cRock);
-    else { c.copy(y<6?cDark:cGrass).lerp(cGrass2, vnoise(x*0.2,z*0.2)); }
+    else { c.copy(y<6?cDark:cGrass).lerp(cGrass2, vnoise(x*0.2,z*0.2));
+      const dry=vnoise(x*0.045+31,z*0.045);
+      if(dry>0.62) c.lerp(cDry,(dry-0.62)*2.2);       // calvas de hierba seca
+    }
+    if(y>WATER+1.4 && y<=52 && sl>2.6) c.lerp(cRock,clamp((sl-2.6)/2.4,0,0.85)); // roca en pendientes
     if(y>WATER+1 && y<30){
       const pd=Math.min(distToPath(x,z,pathA),distToPath(x,z,pathB));
       if(pd<3.4) c.lerp(cPath,(1-smoothstep(1.6,3.4,pd))*0.85);
@@ -527,12 +534,12 @@ terrGeo.rotateX(-Math.PI/2);
   terrGeo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
   terrGeo.computeVertexNormals();
 }
-const terrain=new THREE.Mesh(terrGeo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,metalness:0,flatShading:false}));
+const terrain=new THREE.Mesh(terrGeo,new THREE.MeshStandardMaterial({vertexColors:true,color:0xe8e4d2,roughness:1,metalness:0,flatShading:false}));
 terrain.receiveShadow=true; scene.add(terrain);
 
 // agua
 const water=new THREE.Mesh(new THREE.PlaneGeometry(WORLD,WORLD,56,56),
-  new THREE.MeshStandardMaterial({color:0x2f6d78,transparent:true,opacity:0.82,roughness:0.12,metalness:0.5}));
+  new THREE.MeshStandardMaterial({color:0x1f6f86,transparent:true,opacity:0.85,roughness:0.08,metalness:0.55}));
 water.rotation.x=-Math.PI/2; water.position.y=WATER; scene.add(water);
 const waterPos=water.geometry.attributes.position;
 function updateWater(t){
@@ -626,11 +633,17 @@ const texThatch=canvasTex(128,128,(g,w,h)=>{
     g.lineWidth=1; const x=Math.random()*w,y=Math.random()*h;
     g.beginPath(); g.moveTo(x,y); g.lineTo(x+rand(-3,3),y+8+Math.random()*10); g.stroke(); }
 },3,2);
-const texGround=canvasTex(256,256,(g,w,h)=>{
+const texGround=canvasTex(512,512,(g,w,h)=>{
   g.fillStyle='#cfccbd'; g.fillRect(0,0,w,h);   // claro y cálido: deja que el color de vértice mande
-  speckle(g,w,h,3000,0.12,0.10);
-  for(let i=0;i<120;i++){ g.fillStyle='rgba(70,80,50,'+(Math.random()*0.12)+')';
-    const r=4+Math.random()*14; g.beginPath(); g.arc(Math.random()*w,Math.random()*h,r,0,TAU); g.fill(); }
+  speckle(g,w,h,9000,0.12,0.10);
+  for(let i=0;i<260;i++){ g.fillStyle='rgba(70,80,50,'+(Math.random()*0.12)+')';
+    const r=6+Math.random()*22; g.beginPath(); g.arc(Math.random()*w,Math.random()*h,r,0,TAU); g.fill(); }
+  for(let i=0;i<180;i++){ g.fillStyle='rgba(120,105,70,'+(Math.random()*0.10)+')';
+    const r=5+Math.random()*16; g.beginPath(); g.arc(Math.random()*w,Math.random()*h,r,0,TAU); g.fill(); }
+  // briznas: trazos cortos que rompen el liso del suelo visto de cerca
+  for(let i=0;i<2600;i++){ const x=Math.random()*w, y=Math.random()*h, L=2+Math.random()*4;
+    g.strokeStyle='rgba('+((40+Math.random()*60)|0)+','+((70+Math.random()*70)|0)+',30,'+(0.10+Math.random()*0.16)+')';
+    g.lineWidth=1; g.beginPath(); g.moveTo(x,y); g.lineTo(x+rand(-1.5,1.5),y-L); g.stroke(); }
 },90,90);
 // aplicar mapas (el color del material tiñe la textura)
 M.stoneL.map=texStoneWall; M.stoneL.color.set(0xf2ede4);
@@ -810,6 +823,10 @@ castle.position.set(0, getHeight(0,0), 0);
 castle.scale.set(1.25,1.32,1.25);
 castle.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
 scene.add(castle);
+// raíces cuya geometría se fusiona por material tras construir la aldea
+// (dieta de draw calls) — solo piezas 100% estáticas: nada con luces ni
+// mallas que se animen por nodo (las hogueras/antorchas quedan fuera).
+const staticRoots=[castle];
 // los colisionadores del castillo son locales (X/Z uniformes a 1.25):
 // se transforman a mundo una sola vez, aquí, con la misma escala/posición
 // que se le acaba de aplicar al grupo `castle`.
@@ -857,6 +874,7 @@ const villageSpots=[];
     const h=house(w,d,Math.random()<.5?M.plaster:M.wood, roofMats[i%3]);
     h.rotation.y=rand(0,TAU);
     place(h,x,z,0);
+    staticRoots.push(h);
     villageSpots.push({x,z});
     colliders.push(obb(x,z,w/2,d/2,h.rotation.y)); // caja orientada (rotación libre)
   }
@@ -866,9 +884,54 @@ const villageSpots=[];
   const p1=cyl(0.1,0.1,3,M.wood); p1.position.set(-1.2,1.8,0); const p2=p1.clone(); p2.position.set(1.2,1.8,0);
   const roofw=cone(2,1.2,M.roofRed,4); roofw.rotation.y=Math.PI/4; roofw.position.y=3.6;
   well.add(p1,p2,roofw); place(well,cx,cz,0);
+  staticRoots.push(well);
   colliders.push(cylC(cx,cz,1.6));
   // hoguera de plaza
   makeCampfire(cx+6, cz-6);
+})();
+
+// ============================================================================
+//  FUSIÓN DE GEOMETRÍA ESTÁTICA (dieta de draw calls, deuda H1)
+//  El castillo y la aldea se construyen por composición: cada almena, viga o
+//  merlón era una malla = un draw call (la vista del castillo llegaba a
+//  219-392). Aquí se hornea la matriz de mundo de cada pieza y se concatena
+//  todo en UNA malla por material.
+// ============================================================================
+function concatGeos(geos){
+  let n=0; geos.forEach(g=>{n+=g.attributes.position.count;});
+  const pos=new Float32Array(n*3), nor=new Float32Array(n*3), uv=new Float32Array(n*2);
+  let o3=0,o2=0;
+  geos.forEach(g=>{
+    pos.set(g.attributes.position.array,o3); nor.set(g.attributes.normal.array,o3);
+    if(g.attributes.uv) uv.set(g.attributes.uv.array,o2);
+    o3+=g.attributes.position.count*3; o2+=g.attributes.position.count*2;
+  });
+  const out=new THREE.BufferGeometry();
+  out.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  out.setAttribute('normal',new THREE.BufferAttribute(nor,3));
+  out.setAttribute('uv',new THREE.BufferAttribute(uv,2));
+  return out;
+}
+(function mergeStaticRoots(){
+  const byMat=new Map();
+  staticRoots.forEach(root=>{
+    root.updateMatrixWorld(true);
+    root.traverse(o=>{
+      if(o.isMesh && !o.isInstancedMesh && !o.isSkinnedMesh){
+        const g=o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();
+        g.applyMatrix4(o.matrixWorld);
+        if(!byMat.has(o.material)) byMat.set(o.material,[]);
+        byMat.get(o.material).push(g);
+      }
+    });
+    scene.remove(root);
+  });
+  byMat.forEach((geos,mat)=>{
+    const m=new THREE.Mesh(concatGeos(geos),mat);
+    m.castShadow=true; m.receiveShadow=true;
+    scene.add(m);
+    geos.forEach(g=>g.dispose());
+  });
 })();
 
 // ============================================================================
@@ -906,15 +969,25 @@ const colorize=(pts,fn)=>pts.map(()=>{const c=new THREE.Color(); fn(c); return c
 const pineHue=(c)=>c.setHSL(rand(0.26,0.33),rand(0.4,0.55),rand(0.22,0.34));
 const oakHue=(c)=>c.setHSL(rand(0.2,0.3),rand(0.42,0.58),rand(0.3,0.42));
 const trunkGeo=new THREE.CylinderGeometry(0.16,0.3,5.6,7); trunkGeo.translate(0,2.8,0);
-const pineGeo=new THREE.ConeGeometry(2.4,5.6,8); pineGeo.translate(0,7.6,0);
-const pineGeo2=new THREE.ConeGeometry(1.7,4.0,8); pineGeo2.translate(0,10.6,0);
-const oakGeo=new THREE.IcosahedronGeometry(2.6,1); oakGeo.translate(0,6.6,0);
+// pino de 3 pisos: silueta escalonada en vez de "dos conos"
+const pineGeo=new THREE.ConeGeometry(2.6,5.2,8); pineGeo.translate(0,7.2,0);
+const pineGeo2=new THREE.ConeGeometry(2.0,4.2,8); pineGeo2.translate(0,9.9,0);
+const pineGeo3=new THREE.ConeGeometry(1.3,3.2,8); pineGeo3.translate(0,12.3,0);
+// copa de roble multi-lóbulo: 4 icosaedros horneados en UNA sola geometría —
+// silueta irregular sin draw calls extra
+const oakGeo=concatGeos([
+  (g=>{g.translate(0,6.5,0);return g;})(new THREE.IcosahedronGeometry(2.3,1).toNonIndexed()),
+  (g=>{g.translate(1.5,5.8,0.7);return g;})(new THREE.IcosahedronGeometry(1.6,1).toNonIndexed()),
+  (g=>{g.translate(-1.3,6.0,-0.8);return g;})(new THREE.IcosahedronGeometry(1.7,1).toNonIndexed()),
+  (g=>{g.translate(0.3,7.9,-0.4);return g;})(new THREE.IcosahedronGeometry(1.5,1).toNonIndexed())
+]);
 const treeCount=isMobile?150:280;
 const pinePts=scatterPositions(treeCount,(x,z)=>vnoise(x*0.03,z*0.03)>0.42,0.9,1.6);
 const pineCols=colorize(pinePts,pineHue);
 instancedFrom(trunkGeo,M.woodD,pinePts);
 instancedFrom(pineGeo,leafMatI,pinePts,null,(i)=>pineCols[i]);
 instancedFrom(pineGeo2,leafMatI,pinePts,null,(i)=>pineCols[i]);
+instancedFrom(pineGeo3,leafMatI,pinePts,null,(i)=>pineCols[i]);
 const oakPts=scatterPositions(Math.floor(treeCount*0.5),(x,z)=>vnoise(x*0.05+9,z*0.05)>0.5,0.9,1.5);
 const oakCols=colorize(oakPts,oakHue);
 instancedFrom(trunkGeo,M.woodD,oakPts);
@@ -940,6 +1013,59 @@ const flCols=flPts.map(()=>{const c=new THREE.Color(); const r=Math.random();
   if(r<0.4)c.set(0xe9e2cf); else if(r<0.75)c.set(0xd9b84a); else c.set(0xb0517a); return c;});
 const flowers=instancedFrom(flowerGeo,leafMatI,flPts,(s)=>s*0.08,(i)=>flCols[i]);
 flowers.castShadow=false;
+
+// --- hierba 3D: matas instanciadas (3 planos cruzados con textura de briznas)
+// — el elemento que más vende "suelo de juego de verdad" ---
+const slopeAt=(x,z)=>Math.abs(getHeight(x+2,z)-getHeight(x-2,z))+Math.abs(getHeight(x,z+2)-getHeight(x,z-2));
+const texGrassTuft=canvasTex(64,64,(g,w,h)=>{
+  g.clearRect(0,0,w,h);
+  for(let i=0;i<26;i++){
+    const x0=6+Math.random()*(w-12), tip=x0+rand(-9,9);
+    const gr=g.createLinearGradient(0,h,0,h*0.15);
+    gr.addColorStop(0,'rgba('+((130+Math.random()*30)|0)+','+((145+Math.random()*25)|0)+',105,0.95)');
+    gr.addColorStop(1,'rgba('+((215+Math.random()*35)|0)+','+((228+Math.random()*22)|0)+',195,0.9)');
+    g.strokeStyle=gr; g.lineWidth=1.6+Math.random()*1.6;
+    g.beginPath(); g.moveTo(x0,h); g.quadraticCurveTo(x0+(tip-x0)*0.3,h*0.55,tip,h*rand(0.06,0.3)); g.stroke();
+  }
+},1,1);
+const grassGeo=(function(){
+  const p1=new THREE.PlaneGeometry(1.15,0.85).toNonIndexed(); p1.translate(0,0.42,0);
+  const p2=p1.clone(); p2.rotateY(Math.PI/2);
+  const p3=p1.clone(); p3.rotateY(Math.PI/4);
+  return concatGeos([p1,p2,p3]);
+})();
+const grassMat=new THREE.MeshStandardMaterial({color:0xffffff,map:texGrassTuft,alphaTest:0.4,
+  side:THREE.DoubleSide,roughness:1,metalness:0});
+const grassPts=scatterPositions(isMobile?2800:8500,
+  (x,z,y)=>y<24 && slopeAt(x,z)<3 && vnoise(x*0.05+17,z*0.05)>0.30,0.6,1.2);
+const grassCols=colorize(grassPts,(c)=>c.setHSL(rand(0.21,0.30),rand(0.5,0.68),rand(0.30,0.46)));
+const grassMesh=instancedFrom(grassGeo,grassMat,grassPts,null,(i)=>grassCols[i]);
+grassMesh.castShadow=false; grassMesh.receiveShadow=false;
+
+// --- farallones: afloramientos de roca en las laderas empinadas ---
+const cliffGeo=new THREE.DodecahedronGeometry(1.6,0);
+const cliffPts=scatterPositions(isMobile?45:85,(x,z,y)=>y>6 && y<52 && slopeAt(x,z)>3.4,1.6,3.6);
+instancedFrom(cliffGeo,M.rock,cliffPts,(s)=>-s*0.5);
+
+// --- juncos y espadañas en las orillas (scatter propio: pisan la franja
+// que scatterPositions rechaza por "agua") ---
+const reedGeo=(function(){
+  const stem=new THREE.CylinderGeometry(0.025,0.045,1.7,5).toNonIndexed(); stem.translate(0,0.85,0);
+  const head=new THREE.CylinderGeometry(0.06,0.06,0.42,5).toNonIndexed(); head.translate(0,1.55,0);
+  const blade=new THREE.PlaneGeometry(0.5,1.3).toNonIndexed(); blade.translate(0,0.65,0); blade.rotateY(0.7);
+  return concatGeos([stem,head,blade]);
+})();
+const reedMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:1,side:THREE.DoubleSide});
+const reedPts=[]; let reedTries=0;
+while(reedPts.length<(isMobile?90:220) && reedTries<5000){ reedTries++;
+  const x=rand(-HALF+20,HALF-20), z=rand(-HALF+20,HALF-20), y=getHeight(x,z);
+  if(y<WATER-0.1 || y>WATER+1.05) continue;
+  if(Math.hypot(x-74,z+48)<7) continue;          // campamento de la orilla, despejado
+  reedPts.push({x,y,z,s:rand(0.8,1.5),sy:rand(0.9,1.3),rot:rand(0,TAU)});
+}
+const reedCols=reedPts.map(()=>{const c=new THREE.Color(); c.setHSL(rand(0.16,0.26),rand(0.35,0.5),rand(0.3,0.45)); return c;});
+const reedMesh=instancedFrom(reedGeo,reedMat,reedPts,null,(i)=>reedCols[i]);
+reedMesh.castShadow=false;
 
 // hogueras adicionales (junto a los campamentos)
 makeCampfire(70,-40); makeCampfire(-30,-80);

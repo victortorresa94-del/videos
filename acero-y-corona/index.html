@@ -32,8 +32,12 @@
     touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none;}
   #game{position:fixed;inset:0;}
   #game canvas{display:block;position:fixed;inset:0;}
-  #game canvas{filter:saturate(1.18) contrast(1.04);}
-  @media (min-width:820px){ #game canvas{filter:saturate(1.22) contrast(1.05);} }
+  /* bajado un punto (1.18→1.10 / 1.22→1.14): con el mediodía ya rebalanceado
+     en las luces, este grade ya no tiene que compensar un escenario lavado
+     — dejarlo alto aquí encima habría sido doble trabajo (y sobresaturado
+     el atardecer/noche, que ya estaban bien) */
+  #game canvas{filter:saturate(1.10) contrast(1.04);}
+  @media (min-width:820px){ #game canvas{filter:saturate(1.14) contrast(1.05);} }
   #minimap{display:block;}
 
   /* ---------- Pantalla de título ---------- */
@@ -286,7 +290,7 @@
     <button class="btn ghost" id="aboutBtn">Acerca de</button>
   </div>
   <div class="foot"><b>PC:</b> WASD moverse · ratón (arrastrar) mirar · Espacio saltar · Shift correr · Clic/J atacar · E montar a caballo &nbsp;·&nbsp; <b>Móvil:</b> joystick + botones</div>
-  <div style="position:absolute;bottom:10px;right:14px;color:#a99e86;font-size:12px;letter-spacing:1.5px;">v0.8</div>
+  <div style="position:absolute;bottom:10px;right:14px;color:#a99e86;font-size:12px;letter-spacing:1.5px;">v0.9</div>
 </div>
 
 <!-- Panel controles -->
@@ -313,7 +317,7 @@
   <div class="card">
     <button class="close" data-close>×</button>
     <h2>Acerca de «Acero y Corona»</h2>
-    <p class="sub">Prototipo jugable v0.8 — WebGL, un solo archivo.</p>
+    <p class="sub">Prototipo jugable v0.9 — WebGL, un solo archivo.</p>
     <p>Una <b>rebanada vertical</b> (vertical slice) de un mundo abierto medieval: terreno procedural con colinas, montañas y caminos de tierra, un castillo, una aldea, bosques, ciclo día/noche dinámico, caballero en tercera persona, un <b>caballo que montar</b>, combate cuerpo a cuerpo, monedas, aldeanos, bandidos y un hilo de misiones. Superficies con texturas procedurales, agua con oleaje y nubes a la deriva.</p>
     <p class="dim">Corre en el navegador (PC y móvil) con Three.js. Es la base honesta desde la que crecer hacia la visión completa — la hoja de ruta técnica está en el repositorio (<b>docs/ROADMAP.md</b>), incluyendo cómo se diseña de verdad el <i>backend</i> de un mundo abierto en línea, sin copiar nada de nadie.</p>
     <p class="dim" style="margin-top:10px;">Obra original. Modelos de personaje CC0 de KayKit (Kay Lousberg), caballo CC0 de Quaternius y motor Three.js (MIT), atribuidos en los créditos del proyecto; cualquier parecido con otros juegos es únicamente de género.</p>
@@ -426,8 +430,11 @@ const camera=new THREE.PerspectiveCamera(55,window.innerWidth/window.innerHeight
 scene.fog=new THREE.Fog(0x9db4cc, 90, 650);
 
 // --- cielo (domo con degradado por shader) ---
+// exp bajado 0.7→0.55: el azul del cénit (paleta oficial) llega antes desde
+// el horizonte, así el cielo tiene más presencia en la franja que de verdad
+// se ve en cámara (arquitectura del shader intacta, solo se afina el valor)
 const skyUniforms={ top:{value:new THREE.Color(0x2c6bb0)}, bottom:{value:new THREE.Color(0xbcd4ec)},
-  offset:{value:40}, exp:{value:0.7} };
+  offset:{value:40}, exp:{value:0.55} };
 const sky=new THREE.Mesh(
   new THREE.SphereGeometry(1500,32,16),
   new THREE.ShaderMaterial({uniforms:skyUniforms,side:THREE.BackSide,depthWrite:false,
@@ -457,8 +464,11 @@ const cloudMat=new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,o
 const clouds=[];
 for(let i=0;i<(isMobile?8:14);i++){
   const g=new THREE.Group(); const n=3+((Math.random()*3)|0);
-  for(let j=0;j<n;j++){ const s=new THREE.Mesh(new THREE.SphereGeometry(rand(7,13),7,5),cloudMat);
-    s.position.set(rand(-16,16),rand(-2,2),rand(-8,8)); s.scale.y=0.42; g.add(s); }
+  // puffs un poco más grandes y menos aplastados (0.42→0.47 en Y) que en
+  // v0.8: mismo recuento de mallas (mismo coste de draw calls), más
+  // volumen aparente por nube
+  for(let j=0;j<n;j++){ const s=new THREE.Mesh(new THREE.SphereGeometry(rand(8,15),7,5),cloudMat);
+    s.position.set(rand(-16,16),rand(-2,2),rand(-8,8)); s.scale.y=0.47; g.add(s); }
   g.position.set(rand(-HALF,HALF)*1.5, rand(125,185), rand(-HALF,HALF)*1.5);
   scene.add(g); clouds.push({g,v:rand(1.5,3.2)});
 }
@@ -534,18 +544,41 @@ terrGeo.rotateX(-Math.PI/2);
   terrGeo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
   terrGeo.computeVertexNormals();
 }
-const terrain=new THREE.Mesh(terrGeo,new THREE.MeshStandardMaterial({vertexColors:true,color:0xe8e4d2,roughness:1,metalness:0,flatShading:false}));
+// tinte del terreno: antes 0xe8e4d2 (casi crema) multiplicaba el verde de
+// vértice y lo lavaba a pleno día; se oscurece un punto para que el musgo
+// oficial (#4e7a33/#74a04b) se lea como verde y no como pastel — el grueso
+// de la corrección de "mediodía lavado" va en las luces (ver updateSky).
+const terrain=new THREE.Mesh(terrGeo,new THREE.MeshStandardMaterial({vertexColors:true,color:0xdcd7c0,roughness:1,metalness:0,flatShading:false}));
 terrain.receiveShadow=true; scene.add(terrain);
 
-// agua
+// agua — color más vivo, brillo especular más ceñido (roughness↓) y menos
+// metalness (sin envMap en la escena, un metalness alto solo apaga el
+// cuerpo de color porque no hay nada que reflejar; con menos metalness el
+// teal se ve y el glint del sol/rim se sigue viendo por luz directa)
 const water=new THREE.Mesh(new THREE.PlaneGeometry(WORLD,WORLD,56,56),
-  new THREE.MeshStandardMaterial({color:0x1f6f86,transparent:true,opacity:0.85,roughness:0.08,metalness:0.55}));
+  new THREE.MeshStandardMaterial({color:0x1c7f97,vertexColors:true,transparent:true,opacity:0.88,roughness:0.06,metalness:0.42}));
 water.rotation.x=-Math.PI/2; water.position.y=WATER; scene.add(water);
 const waterPos=water.geometry.attributes.position;
+// franja de orilla, barata y sin shaders: color de vértice por profundidad
+// (agua+terreno son estáticos en XZ, así que se calcula una sola vez aquí).
+// Cerca de la orilla (poca profundidad) el vértice tiñe más claro/cálido
+// (agua somera sobre el fondo); en la zona honda queda el color base intacto.
+{
+  const shallow=new THREE.Color(0xbfe8d4), deep=new THREE.Color(0xffffff);
+  const wcol=[];
+  for(let i=0;i<waterPos.count;i++){
+    const wx=waterPos.getX(i), wz=-waterPos.getY(i); // local->mundo (ver rotationX=-90°)
+    const depth=WATER-getHeight(wx,wz);               // profundidad real del agua ahí
+    const t=smoothstep(0,3.0,depth);                  // rango corto: los estanques del mapa son poco profundos
+    const c=shallow.clone().lerp(deep,t);
+    wcol.push(c.r,c.g,c.b);
+  }
+  water.geometry.setAttribute('color',new THREE.Float32BufferAttribute(wcol,3));
+}
 function updateWater(t){
   for(let i=0;i<waterPos.count;i++){
     const x=waterPos.getX(i), y=waterPos.getY(i);
-    waterPos.setZ(i, Math.sin(x*0.05+t*1.1)*0.18 + Math.cos(y*0.045+t*0.9)*0.16);
+    waterPos.setZ(i, Math.sin(x*0.05+t*1.1)*0.22 + Math.cos(y*0.045+t*0.9)*0.19);
   }
   waterPos.needsUpdate=true; water.geometry.computeVertexNormals();
 }
@@ -646,11 +679,14 @@ const texGround=canvasTex(512,512,(g,w,h)=>{
     g.lineWidth=1; g.beginPath(); g.moveTo(x,y); g.lineTo(x+rand(-1.5,1.5),y-L); g.stroke(); }
 },90,90);
 // aplicar mapas (el color del material tiñe la textura)
-M.stoneL.map=texStoneWall; M.stoneL.color.set(0xf2ede4);
-M.stoneD.map=texStoneSmall; M.stoneD.color.set(0xcfc8bc);
+// tintes de piedra/revoco un punto más oscuros que en v0.8 — antes casi
+// blancos (0xf2ede4 / 0xffffff), quemaban los muros a mediodía; ahora dejan
+// leerse el gris cálido de la textura (base #8f887c, la piedra oficial)
+M.stoneL.map=texStoneWall; M.stoneL.color.set(0xe0d8c6);
+M.stoneD.map=texStoneSmall; M.stoneD.color.set(0xc0b8a8);
 M.wood.map=texWood; M.wood.color.set(0xcdb99f);
 M.woodD.map=texWood; M.woodD.color.set(0x6e5844);
-M.plaster.map=texPlaster; M.plaster.color.set(0xffffff);
+M.plaster.map=texPlaster; M.plaster.color.set(0xf0e6d0);
 M.thatch.map=texThatch; M.thatch.color.set(0xffffff);
 M.roofRed.map=texRoof; M.roofRed.color.set(0xa4453a);
 M.roofBlue.map=texRoof; M.roofBlue.color.set(0x51637f);
@@ -1877,14 +1913,22 @@ function updateSky(dt){
   skyUniforms.top.value.copy(top); skyUniforms.bottom.value.copy(bot);
   scene.fog.color.copy(bot);
   // intensidades
-  sun.intensity=lerp(0.22,2.7,day);
-  sun.color.setHSL(0.085,0.55,lerp(0.75,0.9,day));
+  // pico de mediodía bajado (2.7→2.05) y el sol ya no sube a L=0.9 (casi
+  // blanco): se queda en L=0.8, con más cuerpo de color. Solo se toca el
+  // extremo DÍA de cada lerp — el extremo NOCHE (el primer valor) es el
+  // mismo de siempre, así atardecer/noche no regresionan (dominan del lado
+  // "a" del lerp, ver mapeo de "day" en docs de esta pasada).
+  sun.intensity=lerp(0.22,2.05,day);
+  sun.color.setHSL(0.085,0.55,lerp(0.75,0.8,day));
   sun.color.lerp(cNightLight,clamp(1-day*1.5,0,1)).lerp(cDuskLight,dusk*0.7);
   rim.intensity=lerp(0.2,0.65,day);
   rim.position.copy(P.pos).addScaledVector(sunDir,-120); rim.position.y=P.pos.y+70;
   rim.target.position.copy(P.pos);
   winMat.emissiveIntensity=lerp(1.8,0.06,day);
-  hemi.intensity=lerp(0.28,0.6,day); ambient.intensity=lerp(0.4,0.26,day);
+  // relleno hemisférico también bajado en su pico (0.6→0.48): mantiene la
+  // relación de 3 puntos (clave >> relleno) pero deja de "aplanar" la
+  // hierba y los muros vistos desde arriba a pleno sol.
+  hemi.intensity=lerp(0.28,0.48,day); ambient.intensity=lerp(0.4,0.22,day);
   hemi.color.copy(bot);
   sunDisc.visible=alt>-0.15; moonDisc.visible=alt<0.12;
   sunDisc.material.color.setHSL(0.11,0.7,0.8).lerp(new THREE.Color(0xff8040),dusk);
@@ -1892,7 +1936,7 @@ function updateSky(dt){
   // nubes, halo y niebla dinámica
   sunGlow.position.copy(sunDisc.position);
   sunGlow.material.opacity=0.9*clamp(alt+0.2,0,1);
-  cloudMat.opacity=lerp(0.12,0.72,day);
+  cloudMat.opacity=lerp(0.12,0.84,day);
   scene.fog.far=lerp(300,680,day);
   clouds.forEach(c=>{ c.g.position.x+=c.v*dt; if(c.g.position.x>HALF*1.6) c.g.position.x=-HALF*1.6; });
   // reloj HUD

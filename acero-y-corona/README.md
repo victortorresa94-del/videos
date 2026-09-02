@@ -30,7 +30,9 @@
 
 ---
 
-## 🏰 Qué incluye el prototipo (v0.8)
+## 🏰 Qué incluye el prototipo (v0.9)
+
+> **v0.9 — pase de luz y atmósfera.** El mediodía ya no lava el color: el lavado venía del sol casi blanco a intensidad 2,7, de tintes multiplicativos crema sobre una paleta que ya era correcta, y de la compresión del tone mapping con demasiada radiancia — se reequilibró la iluminación de 3 puntos solo en el extremo de día (el atardecer y la noche, que ya funcionaban, quedan intactos). Cielo con más presencia, nubes con más volumen, **agua con franja de orilla por profundidad** (color de vértice precalculado, sin coste por frame) y oleaje más vivo, y el grade CSS rebajado para no hacer doble trabajo. Verificado con medición de píxel antes/después y rúbrica de la biblia gráfica (media 20,6/25).
 
 > **v0.8 — el escenario despierta (dirección: realismo estilizado tipo Fortnite).** **Hierba 3D** por miles de matas instanciadas con textura de briznas, **robles con copa multi-lóbulo** y pinos de tres pisos, **farallones de roca** en laderas empinadas, **juncos y espadañas** en las orillas, roca que asoma en las pendientes del terreno y calvas de hierba seca, textura de suelo al doble de resolución con briznas pintadas, y agua más profunda. Todo pagado con la **fusión de geometría estática** (cada almena y viga del castillo/aldea era un draw call): la vista del castillo baja de 219–392 a **~120 draw calls** y la aldea de 339 a **~108**, con TODO el detalle nuevo incluido.
 
